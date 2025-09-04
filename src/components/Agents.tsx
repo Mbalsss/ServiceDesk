@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { TechAvailability as TechType } from '../types';
 import { Plus, Trash2 } from 'lucide-react';
+import { supabase } from '../lib/supabase'; // Your Supabase client
 
 interface Props {
   technicians: TechType[];
@@ -10,34 +11,144 @@ interface Props {
 const Agents: React.FC<Props> = ({ technicians, onTechniciansChange }) => {
   const [newName, setNewName] = useState('');
   const [newRole, setNewRole] = useState('Technician');
+  const [loading, setLoading] = useState(false);
 
-  // Initialize default technicians if list is empty
-  React.useEffect(() => {
-    if (technicians.length === 0) {
-      const defaultTechs: TechType[] = [
-        { id: '1', name: 'Dumile Soga', status: 'available', role: 'Manager' },
-        { id: '2', name: 'Rethabile Ntsekhe', status: 'available', role: 'Backend' },
-        { id: '3', name: 'Petlo Matabane', status: 'available', role: 'Frontend' },
-        { id: '4', name: 'Monica Ndlovu', status: 'available', role: 'Customer Support' },
-      ];
-      onTechniciansChange(defaultTechs);
+  // Fetch technicians from Supabase on component mount
+  useEffect(() => {
+    fetchTechnicians();
+  }, []);
+
+  const fetchTechnicians = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('technicians')
+        .select('*')
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching technicians:', error);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        onTechniciansChange(data as TechType[]);
+      } else {
+        // Initialize with default technicians if table is empty
+        await initializeDefaultTechnicians();
+      }
+    } catch (error) {
+      console.error('Error:', error);
+    } finally {
+      setLoading(false);
     }
-  }, [technicians, onTechniciansChange]);
-
-  const addTechnician = () => {
-    if (!newName) return;
-    const newTech: TechType = { id: Date.now().toString(), name: newName, status: 'available', role: newRole };
-    onTechniciansChange([...technicians, newTech]);
-    setNewName('');
   };
 
-  const removeTechnician = (id: string) => {
-    onTechniciansChange(technicians.filter(t => t.id !== id));
+  const initializeDefaultTechnicians = async () => {
+    const defaultTechs: Omit<TechType, 'id'>[] = [
+      { name: 'Dumile Soga', status: 'available', role: 'Manager' },
+      { name: 'Rethabile Ntsekhe', status: 'available', role: 'Backend' },
+      { name: 'Petlo Matabane', status: 'available', role: 'Frontend' },
+      { name: 'Monica Ndlovu', status: 'available', role: 'Customer Support' },
+    ];
+
+    try {
+      const { data, error } = await supabase
+        .from('technicians')
+        .insert(defaultTechs)
+        .select();
+
+      if (error) {
+        console.error('Error inserting default technicians:', error);
+        return;
+      }
+
+      if (data) {
+        onTechniciansChange(data as TechType[]);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+    }
   };
 
-  const updateRole = (id: string, role: string) => {
-    onTechniciansChange(technicians.map(t => t.id === id ? { ...t, role } : t));
+  const addTechnician = async () => {
+    if (!newName.trim()) return;
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('technicians')
+        .insert([{ name: newName.trim(), role: newRole }])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error adding technician:', error);
+        return;
+      }
+
+      if (data) {
+        onTechniciansChange([...technicians, data as TechType]);
+        setNewName('');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const removeTechnician = async (id: string) => {
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('technicians')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error deleting technician:', error);
+        return;
+      }
+
+      onTechniciansChange(technicians.filter(t => t.id !== id));
+    } catch (error) {
+      console.error('Error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateRole = async (id: string, role: string) => {
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('technicians')
+        .update({ role })
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error updating role:', error);
+        return;
+      }
+
+      onTechniciansChange(technicians.map(t => t.id === id ? { ...t, role } : t));
+    } catch (error) {
+      console.error('Error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading && technicians.length === 0) {
+    return (
+      <div className="p-6">
+        <div className="flex justify-center items-center h-32">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">
@@ -51,8 +162,14 @@ const Agents: React.FC<Props> = ({ technicians, onTechniciansChange }) => {
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           className="border rounded px-2 py-1 flex-1"
+          disabled={loading}
         />
-        <select value={newRole} onChange={(e) => setNewRole(e.target.value)} className="border rounded px-2 py-1">
+        <select 
+          value={newRole} 
+          onChange={(e) => setNewRole(e.target.value)} 
+          className="border rounded px-2 py-1"
+          disabled={loading}
+        >
           <option>Technician</option>
           <option>Manager</option>
           <option>Backend</option>
@@ -60,10 +177,21 @@ const Agents: React.FC<Props> = ({ technicians, onTechniciansChange }) => {
           <option>Customer Support</option>
           <option>Supervisor</option>
         </select>
-        <button onClick={addTechnician} className="bg-blue-500 text-white px-4 rounded flex items-center space-x-1">
+        <button 
+          onClick={addTechnician} 
+          disabled={loading || !newName.trim()}
+          className="bg-blue-500 text-white px-4 rounded flex items-center space-x-1 disabled:bg-blue-300"
+        >
           <Plus className="w-4 h-4" /> <span>Add</span>
         </button>
       </div>
+
+      {/* Loading overlay */}
+      {loading && (
+        <div className="fixed inset-0 bg-black bg-opacity-10 flex items-center justify-center z-50">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+        </div>
+      )}
 
       {/* Technicians Table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
@@ -77,6 +205,7 @@ const Agents: React.FC<Props> = ({ technicians, onTechniciansChange }) => {
                 value={tech.role}
                 onChange={(e) => updateRole(tech.id, e.target.value)}
                 className="border rounded px-2 py-1"
+                disabled={loading}
               >
                 <option>Technician</option>
                 <option>Manager</option>
@@ -85,7 +214,11 @@ const Agents: React.FC<Props> = ({ technicians, onTechniciansChange }) => {
                 <option>Customer Support</option>
                 <option>Supervisor</option>
               </select>
-              <button onClick={() => removeTechnician(tech.id)} className="text-red-500">
+              <button 
+                onClick={() => removeTechnician(tech.id)} 
+                disabled={loading}
+                className="text-red-500 disabled:text-red-300"
+              >
                 <Trash2 className="w-4 h-4" />
               </button>
             </div>
