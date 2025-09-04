@@ -19,7 +19,6 @@ export interface DatabaseTicket {
   priority: 'low' | 'medium' | 'high' | 'critical';
   status: 'open' | 'in_progress' | 'resolved' | 'closed';
   category: string;
-  subcategory?: string;
   assignee?: string;
   requester: string;
   created_at: string;
