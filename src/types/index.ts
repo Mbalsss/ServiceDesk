@@ -10,7 +10,6 @@ export interface Ticket {
   createdAt: Date;
   updatedAt: Date;
   category: string;
-  subcategory?: string;
 }
 
 export interface User {

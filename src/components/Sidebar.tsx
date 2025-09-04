@@ -1,56 +1,101 @@
 import React from 'react';
-import { Home, Ticket, Plus, Users, BarChart3, Settings, MessageSquare, Zap, Calendar, Clock, CheckSquare, Megaphone, Activity, AlertTriangle, Bot } from 'lucide-react';
+import { 
+  Home, Ticket, Calendar, Activity, CheckSquare, Clock, Megaphone, 
+  Users, BarChart3, Bot, MessageSquare, Settings, List, Search, ClipboardList, HelpCircle, Wrench, Plus, User, LogOut 
+} from 'lucide-react';
+
+// Sidebar link component
+const SidebarLink = ({ icon, text, active, onClick }) => (
+  <a
+    href="#"
+    onClick={onClick}
+    className={`flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ${
+      active ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+    }`}
+  >
+    {icon}
+    <span className="font-medium">{text}</span>
+  </a>
+);
 
 interface SidebarProps {
+  currentUser: { role: string };
   activeView: string;
   onViewChange: (view: string) => void;
+  logout: () => void;
+  onOpenCreateTicket?: () => void;
+  setChatOpen?: (open: boolean) => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) => {
-  const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: Home },
-    { id: 'tickets', label: 'All Tickets', icon: Ticket },
-    { id: 'create', label: 'Create Ticket', icon: Plus },
-    { id: 'chatbot', label: 'ChatBot', icon: MessageSquare },
-    { id: 'major-incidents', label: 'Major Incidents', icon: AlertTriangle },
-    { id: 'scheduler', label: 'Scheduler', icon: Calendar },
-    { id: 'tech-availability', label: 'Tech Availability', icon: Activity },
-    { id: 'field-report', label: 'Field Reports', icon: BarChart3 },
-    { id: 'tasks', label: 'Tasks', icon: CheckSquare },
-    { id: 'reminders', label: 'Reminders', icon: Clock },
-    { id: 'announcements', label: 'Announcements', icon: Megaphone },
-    { id: 'agents', label: 'Agents', icon: Users },
-    { id: 'reports', label: 'Reports', icon: BarChart3 },
-    { id: 'copilot', label: 'Copilot Assistant', icon: Bot },
-    { id: 'teams', label: 'Teams Integration', icon: MessageSquare },
-    { id: 'automation', label: 'Automation', icon: Zap },
-    { id: 'settings', label: 'Settings', icon: Settings },
-  ];
+const Sidebar: React.FC<SidebarProps> = ({
+  currentUser,
+  activeView,
+  onViewChange,
+  logout,
+  onOpenCreateTicket,
+  setChatOpen,
+}) => {
+  // Menu configuration
+  const menuConfig: Record<string, any[]> = {
+    admin: [
+      { id: "dashboard", label: "Dashboard", icon: <Home size={20} /> },
+      { id: "tickets", label: "Tickets", icon: <Ticket size={20} /> },
+      { id: "scheduler", label: "Scheduler", icon: <Calendar size={20} /> },
+      { id: "tasks", label: "Tasks", icon: <CheckSquare size={20} /> },
+      { id: "reminders", label: "Reminders", icon: <Clock size={20} /> },
+      { id: "announcements", label: "Announcements", icon: <Megaphone size={20} /> },
+      { id: "agents", label: "Agents", icon: <Users size={20} /> },
+      { id: "reports", label: "Reports", icon: <BarChart3 size={20} /> },
+      { id: "copilot", label: "Copilot Assistant", icon: <Bot size={20} /> },
+      { id: "teams", label: "Teams Integration", icon: <MessageSquare size={20} /> },
+      { id: "automation", label: "Automation", icon: <Settings size={20} /> },
+      { id: "settings", label: "Settings", icon: <Settings size={20} /> },
+    ],
+    technician: [
+      { id: "dashboard", label: "Dashboard", icon: <Home size={20} /> },
+      { id: "ticketsPage", label: "Tickets", icon: <List size={20} /> },
+      { id: "performance", label: "Performance", icon: <BarChart3 size={20} /> },
+      { id: "field_report", label: "Field Reports", icon: <ClipboardList size={20} /> },
+      { id: "team_chat", label: "Team Chat", icon: <Users size={20} /> },
+      { id: "schedule", label: "Schedule", icon: <Calendar size={20} /> },
+      { id: "knowledge", label: "Knowledge Base", icon: <HelpCircle size={20} /> },
+      { id: "equipment", label: "Equipment", icon: <Wrench size={20} /> },
+      { id: "reports", label: "Analytics", icon: <BarChart3 size={20} /> },
+    ],
+    // *** THE ONLY CHANGE IS HERE ***
+    // Changed 'end_user' to 'user' to match the data from your database.
+    user: [
+      { id: "dashboard", label: "Dashboard", icon: <Home size={20} /> },
+      { id: "my_tickets", label: "My Tickets", icon: <List size={20} /> },
+      { id: "create", label: "Create Ticket", icon: <Plus size={20} />, action: onOpenCreateTicket },
+      { id: "chat_support", label: "Chat with Support", icon: <MessageSquare size={20} />, action: () => setChatOpen?.(true) },
+      { id: "profile_settings", label: "Settings", icon: <User size={20} /> },
+    ],
+  };
+
+  const links = menuConfig[currentUser.role] || [];
 
   return (
-    <aside className="w-64 bg-gray-50 border-r border-gray-200 h-screen">
-      <nav className="p-4">
-        <ul className="space-y-2">
-          {menuItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <li key={item.id}>
-                <button
-                  onClick={() => onViewChange(item.id)}
-                  className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-left transition-colors ${
-                    activeView === item.id
-                      ? 'bg-blue-100 text-blue-700 border border-blue-200'
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span className="font-medium">{item.label}</span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+    <aside className="w-64 bg-white border-r border-gray-200 flex flex-col p-4">
+      <div className="text-2xl font-bold text-gray-800 mb-8">
+        IT Support Portal
+      </div>
+
+      <nav className="flex-1 space-y-2">
+        {links.map((item) => (
+          <SidebarLink
+            key={item.id}
+            icon={item.icon}
+            text={item.label}
+            active={activeView === item.id}
+            onClick={() => item.action ? item.action() : onViewChange(item.id)}
+          />
+        ))}
       </nav>
+
+      <div className="mt-auto">
+        <SidebarLink icon={<LogOut size={20} />} text="Logout" onClick={logout} />
+      </div>
     </aside>
   );
 };
