@@ -10,11 +10,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@azure/msal-browser": "^4.22.0",
+    "@azure/msal-react": "^3.0.19",
+    "@microsoft/microsoft-graph-client": "^3.0.7",
     "@supabase/supabase-js": "^2.54.0",
     "axios": "^1.11.0",
     "chart.js": "^4.5.0",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
+    "framer-motion": "^12.23.12",
     "lucide-react": "^0.344.0",
     "nodemailer": "^7.0.6",
     "react": "^18.3.1",

@@ -2,62 +2,89 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { BarChart3, CheckCircle, Clock, AlertCircle, TrendingUp } from 'lucide-react';
 
-interface PerformanceOverviewProps {
-  currentUser: { id: string; role: string };
-}
-
 interface TicketType {
   id: string;
   status: string;
   priority: string;
+  assignee_id?: string;
+  requester_id?: string;
   sla_deadline?: string;
   created_at: string;
   updated_at: string;
 }
 
-const PerformanceOverview: React.FC<PerformanceOverviewProps> = ({ currentUser }) => {
+const PerformanceOverview: React.FC = () => {
   const [tickets, setTickets] = useState<TicketType[]>([]);
+  const [currentUser, setCurrentUser] = useState<{ id: string; role: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchTickets = async () => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
+  useEffect(() => {
+    const fetchUserAndTickets = async () => {
+      setLoading(true);
+
+      // 1️⃣ Get session user
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        console.error('No logged-in user:', userError);
+        setLoading(false);
+        return;
+      }
+
+      // 2️⃣ Fetch role from profiles table
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, role')
+        .eq('id', user.id)
+        .single();
+
+      if (profileError || !profile) {
+        console.error('Failed to fetch profile:', profileError);
+        setLoading(false);
+        return;
+      }
+
+      setCurrentUser(profile);
+
+      // 3️⃣ Fetch tickets
+      const { data: ticketsData, error: ticketsError } = await supabase
         .from('tickets')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (ticketsError) {
+        console.error('Error fetching tickets:', ticketsError);
+        setLoading(false);
+        return;
+      }
 
-      // Admin sees all, others see assigned/requester
-      let visibleTickets = data || [];
-      if (currentUser.role !== 'admin') {
+      // 4️⃣ Filter tickets based on role
+      let visibleTickets = ticketsData || [];
+      if (profile.role !== 'admin') {
         visibleTickets = visibleTickets.filter(
-          (t) => t.assignee_id === currentUser.id || t.requester_id === currentUser.id
+          (t) => t.assignee_id === profile.id || t.requester_id === profile.id
         );
       }
 
       setTickets(visibleTickets);
-    } catch (err) {
-      console.error(err);
-    } finally {
       setLoading(false);
-    }
-  };
+    };
 
-  useEffect(() => {
-    fetchTickets();
+    fetchUserAndTickets();
   }, []);
 
   if (loading) return <div className="p-6">Loading performance metrics...</div>;
 
+  // Key metrics
+  const total = tickets.length;
   const resolved = tickets.filter((t) => t.status === 'resolved').length;
   const pending = tickets.filter((t) => ['open', 'in_progress'].includes(t.status)).length;
   const now = new Date();
   const overdue = tickets.filter(
-    (t) => t.sla_deadline && new Date(t.sla_deadline) < now && !['resolved', 'closed'].includes(t.status)
+    (t) =>
+      t.sla_deadline &&
+      new Date(t.sla_deadline) < now &&
+      !['resolved', 'closed'].includes(t.status)
   ).length;
-  const total = tickets.length;
   const resolutionRate = total > 0 ? (resolved / total) * 100 : 0;
 
   // Status & Priority breakdown
@@ -122,12 +149,7 @@ const PerformanceOverview: React.FC<PerformanceOverviewProps> = ({ currentUser }
             <div className="w-full bg-gray-200 rounded-full h-2">
               <div
                 className={`h-2 rounded-full ${
-                  {
-                    open: 'bg-blue-500',
-                    in_progress: 'bg-orange-500',
-                    resolved: 'bg-green-500',
-                    closed: 'bg-gray-500',
-                  }[status]
+                  { open: 'bg-blue-500', in_progress: 'bg-orange-500', resolved: 'bg-green-500', closed: 'bg-gray-500' }[status]
                 }`}
                 style={{ width: `${getPercentage(count)}%` }}
               ></div>
@@ -148,12 +170,7 @@ const PerformanceOverview: React.FC<PerformanceOverviewProps> = ({ currentUser }
             <div className="w-full bg-gray-200 rounded-full h-2">
               <div
                 className={`h-2 rounded-full ${
-                  {
-                    critical: 'bg-red-500',
-                    high: 'bg-orange-500',
-                    medium: 'bg-yellow-500',
-                    low: 'bg-gray-500',
-                  }[priority]
+                  { critical: 'bg-red-500', high: 'bg-orange-500', medium: 'bg-yellow-500', low: 'bg-gray-500' }[priority]
                 }`}
                 style={{ width: `${getPercentage(count)}%` }}
               ></div>
