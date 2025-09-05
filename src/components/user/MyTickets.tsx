@@ -1,49 +1,83 @@
 // src/components/user/MyTickets.tsx
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Search, Filter, ChevronDown, Loader2, Inbox } from "lucide-react";
-import { Ticket } from "../../types";
-import TicketDetails from "./TicketDetails";
+import { supabase } from "../../lib/supabase";
 
-interface MyTicketsProps {
-  tickets: Ticket[];
-  loading: boolean;
-  error: string | null;
-  onOpenCreateTicket: () => void;
-  currentUser: { id: string; name: string; email: string }; // Added currentUser for TicketDetails
+interface Ticket {
+  id: string;
+  title: string;
+  description: string;
+  priority: string;
+  status: string;
+  createdAt: Date;
+  assignee?: string;
+  ticket_number: string;
 }
 
-const MyTickets: React.FC<MyTicketsProps> = ({
-  tickets,
-  loading,
-  error,
-  onOpenCreateTicket,
-  currentUser,
-}) => {
+interface MyTicketsProps {
+  onOpenCreateTicket: () => void;
+}
+
+const MyTickets: React.FC<MyTicketsProps> = ({ onOpenCreateTicket }) => {
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [dateFilter, setDateFilter] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
 
-  // State for currently selected ticket to show details
-  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  // Fetch tickets from Supabase
+  useEffect(() => {
+    const fetchTickets = async () => {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("tickets")
+        .select(`
+          id,
+          title,
+          description,
+          priority,
+          status,
+          created_at,
+          assignee:assignee_id(full_name),
+          ticket_number
+        `)
+        .order("created_at", { ascending: false });
 
+      if (error) setError(error.message);
+      else if (data) {
+        const formattedTickets: Ticket[] = data.map((t: any) => ({
+          id: t.id,
+          title: t.title,
+          description: t.description,
+          priority: t.priority,
+          status: t.status,
+          createdAt: new Date(t.created_at),
+          assignee: t.assignee?.full_name || "Unassigned",
+          ticket_number: t.ticket_number,
+        }));
+        setTickets(formattedTickets);
+      }
+      setLoading(false);
+    };
+
+    fetchTickets();
+  }, []);
+
+  // Live filter tickets
   const filteredTickets = useMemo(() => {
     return tickets.filter(ticket => {
-      // Search term filter
       const matchesSearch =
-        searchTerm === "" ||
         ticket.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         ticket.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        ticket.id.toLowerCase().includes(searchTerm.toLowerCase());
+        ticket.ticket_number.toLowerCase().includes(searchTerm.toLowerCase());
 
-      // Status filter
       const matchesStatus = statusFilter === "all" || ticket.status === statusFilter;
-
-      // Priority filter
       const matchesPriority = priorityFilter === "all" || ticket.priority === priorityFilter;
 
-      // Date filter (simplified)
       const matchesDate =
         dateFilter === "all" ||
         (dateFilter === "today" && isToday(ticket.createdAt)) ||
@@ -54,30 +88,12 @@ const MyTickets: React.FC<MyTicketsProps> = ({
     });
   }, [tickets, searchTerm, statusFilter, priorityFilter, dateFilter]);
 
-  const getStatusColor = (status: string) =>
-    ({
-      open: "text-blue-600 bg-blue-100 border-blue-200",
-      in_progress: "text-orange-600 bg-orange-100 border-orange-200",
-      resolved: "text-green-600 bg-green-100 border-green-200",
-      closed: "text-purple-600 bg-purple-100 border-purple-200",
-    }[status] || "text-gray-600 bg-gray-100 border-gray-200");
-
-  const getPriorityColor = (priority: string) =>
-    ({
-      critical: "text-red-600 bg-red-100 border-red-200",
-      high: "text-orange-600 bg-orange-100 border-orange-200",
-      medium: "text-yellow-600 bg-yellow-100 border-yellow-200",
-      low: "text-green-600 bg-green-100 border-green-200",
-    }[priority] || "text-gray-600 bg-gray-100 border-gray-200");
-
-  // Helper functions for date filtering
+  // Date helpers
   const isToday = (date: Date) => {
     const today = new Date();
-    return (
-      date.getDate() === today.getDate() &&
-      date.getMonth() === today.getMonth() &&
-      date.getFullYear() === today.getFullYear()
-    );
+    return date.getDate() === today.getDate() &&
+           date.getMonth() === today.getMonth() &&
+           date.getFullYear() === today.getFullYear();
   };
 
   const isThisWeek = (date: Date) => {
@@ -93,16 +109,15 @@ const MyTickets: React.FC<MyTicketsProps> = ({
     return date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
   };
 
-  if (loading) {
+  if (loading)
     return (
       <div className="flex items-center justify-center p-12">
         <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
         <p className="ml-4 text-gray-600">Loading tickets...</p>
       </div>
     );
-  }
 
-  if (error) {
+  if (error)
     return (
       <div className="p-12 text-center text-red-600">
         <p>{error}</p>
@@ -114,26 +129,14 @@ const MyTickets: React.FC<MyTicketsProps> = ({
         </button>
       </div>
     );
-  }
-
-  // Render TicketDetails view if a ticket is selected
-  if (selectedTicket) {
-    return (
-      <TicketDetails
-        ticket={selectedTicket}
-        onBack={() => setSelectedTicket(null)}
-        currentUser={currentUser}
-      />
-    );
-  }
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+      {/* Header & Search */}
       <div className="px-6 py-4 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <h2 className="text-xl font-semibold text-gray-900">My Tickets</h2>
 
         <div className="flex flex-col sm:flex-row gap-3">
-          {/* Search input */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
@@ -145,7 +148,6 @@ const MyTickets: React.FC<MyTicketsProps> = ({
             />
           </div>
 
-          {/* Filter toggle */}
           <button
             onClick={() => setShowFilters(!showFilters)}
             className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
@@ -155,7 +157,6 @@ const MyTickets: React.FC<MyTicketsProps> = ({
             <ChevronDown className={`w-4 h-4 transition-transform ${showFilters ? "rotate-180" : ""}`} />
           </button>
 
-          {/* Create ticket button */}
           <button
             onClick={onOpenCreateTicket}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
@@ -165,10 +166,9 @@ const MyTickets: React.FC<MyTicketsProps> = ({
         </div>
       </div>
 
-      {/* Filter options */}
+      {/* Filters */}
       {showFilters && (
         <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Status filter */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
             <select
@@ -184,7 +184,6 @@ const MyTickets: React.FC<MyTicketsProps> = ({
             </select>
           </div>
 
-          {/* Priority filter */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
             <select
@@ -200,7 +199,6 @@ const MyTickets: React.FC<MyTicketsProps> = ({
             </select>
           </div>
 
-          {/* Date filter */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
             <select
@@ -217,15 +215,13 @@ const MyTickets: React.FC<MyTicketsProps> = ({
         </div>
       )}
 
-      {/* Tickets table */}
+      {/* Tickets Table */}
       {filteredTickets.length === 0 ? (
         <div className="flex flex-col items-center justify-center p-12 text-center">
           <Inbox className="w-12 h-12 text-gray-400" />
           <h3 className="mt-4 text-lg font-medium text-gray-900">No tickets found</h3>
           <p className="mt-2 text-sm text-gray-500">
-            {searchTerm || statusFilter !== "all" || priorityFilter !== "all" || dateFilter !== "all"
-              ? "Try adjusting your search or filters"
-              : "Get started by creating a new ticket"}
+            Try adjusting your search or filters
           </p>
           <button
             onClick={onOpenCreateTicket}
@@ -240,7 +236,7 @@ const MyTickets: React.FC<MyTicketsProps> = ({
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Ticket ID
+                  Ticket #
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Title
@@ -261,37 +257,14 @@ const MyTickets: React.FC<MyTicketsProps> = ({
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredTickets.map((ticket) => (
-                <tr
-                  key={ticket.id}
-                  className="hover:bg-gray-50 cursor-pointer"
-                  onClick={() => setSelectedTicket(ticket)}
-                >
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{ticket.id}</td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm font-medium text-gray-900">{ticket.title}</div>
-                    <div className="text-sm text-gray-500 truncate max-w-xs">{ticket.description}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border capitalize ${getPriorityColor(
-                        ticket.priority
-                      )}`}
-                    >
-                      {ticket.priority}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border capitalize ${getStatusColor(
-                        ticket.status
-                      )}`}
-                    >
-                      {ticket.status.replace("_", " ")}
-                    </span>
-                  </td>
+                <tr key={ticket.id} className="hover:bg-gray-50 cursor-pointer">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ticket.ticket_number}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ticket.title}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ticket.priority}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ticket.status}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ticket.assignee}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {ticket.createdAt.toLocaleDateString()} at {ticket.createdAt.toLocaleTimeString()}
+                    {ticket.createdAt.toLocaleDateString()} {ticket.createdAt.toLocaleTimeString()}
                   </td>
                 </tr>
               ))}
