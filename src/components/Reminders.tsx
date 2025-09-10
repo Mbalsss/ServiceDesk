@@ -103,9 +103,9 @@ const Reminders = () => {
 
   const filteredReminders = reminderList.filter(reminder => {
     if (filter === 'all') return true;
-    if (filter === 'pending') return !reminder.is_completed;
-    if (filter === 'completed') return reminder.is_completed;
-    if (filter === 'overdue') return !reminder.is_completed && new Date(reminder.due_date) < new Date();
+    if (filter === 'Pending') return !reminder.is_completed;
+    if (filter === 'Completed') return reminder.is_completed;
+    if (filter === 'Overdue') return !reminder.is_completed && new Date(reminder.due_date) < new Date();
     return reminder.type === filter;
   });
 
@@ -115,20 +115,20 @@ const Reminders = () => {
 
   const getTypeColor = (type: string) => {
     switch (type) {
-      case 'ticket_followup': return 'text-blue-600 bg-blue-100 border-blue-200';
-      case 'maintenance': return 'text-red-600 bg-red-100 border-red-200';
-      case 'meeting': return 'text-green-600 bg-green-100 border-green-200';
-      case 'general': return 'text-gray-600 bg-gray-100 border-gray-200';
+      case 'Ticket_followup': return 'text-blue-600 bg-blue-100 border-blue-200';
+      case 'Maintenance': return 'text-red-600 bg-red-100 border-red-200';
+      case 'Meeting': return 'text-green-600 bg-green-100 border-green-200';
+      case 'General': return 'text-gray-600 bg-gray-100 border-gray-200';
       default: return 'text-gray-600 bg-gray-100 border-gray-200';
     }
   };
 
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case 'ticket_followup': return <AlertTriangle className="w-4 h-4" />;
-      case 'maintenance': return <Clock className="w-4 h-4" />;
-      case 'meeting': return <Calendar className="w-4 h-4" />;
-      case 'general': return <Bell className="w-4 h-4" />;
+      case 'Ticket_followup': return <AlertTriangle className="w-4 h-4" />;
+      case 'Maintenance': return <Clock className="w-4 h-4" />;
+      case 'Meeting': return <Calendar className="w-4 h-4" />;
+      case 'General': return <Bell className="w-4 h-4" />;
       default: return <Bell className="w-4 h-4" />;
     }
   };
