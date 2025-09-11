@@ -23,9 +23,9 @@ interface SidebarProps {
   activeView: string;
   onViewChange: (view: string) => void;
   logout: () => void;
-  onOpenCreateTicket?: () => void; // This is for user role's "Create Ticket"
-  setChatOpen?: (open: boolean) => void; // For ServiceDeskChatbot
-  setTeamsChatOpen?: (open: boolean) => void; // For TeamsChatWrapper
+  onOpenCreateTicket?: () => void;
+  setChatOpen?: (open: boolean) => void;
+  setTeamsChatOpen?: (open: boolean) => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -37,7 +37,6 @@ const Sidebar: React.FC<SidebarProps> = ({
   setChatOpen,
   setTeamsChatOpen,
 }) => {
-  // Menu configuration
   const menuConfig: Record<string, any[]> = {
     admin: [
       { id: "dashboard", label: "Dashboard", icon: <Home size={20} /> },
@@ -72,8 +71,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   };
 
   return (
-    <div className="w-64 bg-white border-r flex flex-col">
-      <div className="flex-1">
+    <div className="w-64 bg-white border-r flex flex-col h-full sticky top-0">
+      <div className="flex-1 overflow-y-auto py-4">
         {menuConfig[currentUser.role]?.map((item) => (
           <SidebarLink
             key={item.id}
@@ -86,14 +85,16 @@ const Sidebar: React.FC<SidebarProps> = ({
             }}
           />
         ))}
-      </div>
-      <div className="p-4 border-t">
-        <button
-          onClick={logout}
-          className="flex items-center gap-3 text-gray-600 hover:bg-gray-100 px-4 py-2 rounded-lg w-full"
-        >
-          <LogOut size={20} /> Logout
-        </button>
+        {/* Logout closer to menu */}
+        <SidebarLink
+          icon={<LogOut size={20} />}
+          text="Logout"
+          active={false}
+          onClick={(e) => {
+            e.preventDefault();
+            logout();
+          }}
+        />
       </div>
     </div>
   );
