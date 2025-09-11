@@ -1,26 +1,51 @@
+// src/components/knowledgebase/KnowledgeBase.tsx
 import React, { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
+import Layout from "../technician/Layout"; // import the Layout component
 
 interface Article {
   id: string;
   title: string;
   content: string;
+  excerpt?: string | null;
   category: string;
+  status: "draft" | "published" | "archived";
+  author_id: string;
+  views?: number;
+  helpful_count?: number;
+  not_helpful_count?: number;
+  related_tickets?: number;
+  tags?: string[];
+  is_featured?: boolean;
   created_at: string;
+  updated_at: string;
+  published_at?: string | null;
 }
 
-const KnowledgeBase: React.FC = () => {
+interface KnowledgeBaseProps {
+  currentUser: { id: string; name: string; email: string; role: string };
+}
+
+const KnowledgeBase: React.FC<KnowledgeBaseProps> = ({ currentUser }) => {
   const [articles, setArticles] = useState<Article[]>([]);
   const [search, setSearch] = useState("");
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("all");
+  const [categories, setCategories] = useState([
+    "software",
+    "hardware",
+    "network",
+    "process",
+    "general",
+  ]);
 
   // Form state
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [formArticle, setFormArticle] = useState<Partial<Article>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [showForm, setShowForm] = useState(false);
 
-  // Load articles
   useEffect(() => {
     loadArticles();
   }, []);
@@ -28,210 +53,229 @@ const KnowledgeBase: React.FC = () => {
   const loadArticles = async () => {
     setLoading(true);
     const { data, error } = await supabase
-      .from("knowledge_base")
+      .from("knowledge_base_articles")
       .select("*")
       .order("created_at", { ascending: false });
 
-    if (error) console.error("Error fetching articles:", error);
-    setArticles(data ?? []);
+    if (error) {
+      console.error("Error fetching articles:", error);
+      alert("Failed to load articles. Please try again.");
+    } else {
+      setArticles(data || []);
+    }
     setLoading(false);
   };
 
-  // Handle form submission
   const handleSubmit = async () => {
-    if (!formArticle.title || !formArticle.content) {
-      alert("Title and content are required.");
+    if (!formArticle.title || !formArticle.content || !formArticle.category) {
+      alert("Title, content, and category are required.");
       return;
     }
     setSubmitting(true);
 
-    if (formMode === "create") {
-      const { data, error } = await supabase
-        .from("knowledge_base")
-        .insert([
-          {
-            title: formArticle.title,
-            content: formArticle.content,
-            category: formArticle.category || "",
-          },
-        ]);
-
-      if (error) {
-        console.error(error);
-        alert("Failed to create article.");
-      } else {
-        setArticles([...(data ?? []), ...articles]);
-        setFormArticle({});
-      }
-    } else if (formMode === "edit" && formArticle.id) {
-      const { data, error } = await supabase
-        .from("knowledge_base")
-        .update({
-          title: formArticle.title,
-          content: formArticle.content,
-          category: formArticle.category,
-        })
-        .eq("id", formArticle.id);
-
-      if (error) {
-        console.error(error);
-        alert("Failed to update article.");
-      } else {
-        // Update locally
-        setArticles(
-          articles.map((a) => (a.id === formArticle.id ? { ...a, ...formArticle } as Article : a))
-        );
-        setFormArticle({});
-        setFormMode("create");
-      }
+    const user = await supabase.auth.getUser();
+    const author_id = user.data.user?.id;
+    if (!author_id) {
+      alert("You must be logged in to create or edit articles.");
+      setSubmitting(false);
+      return;
     }
 
-    setSubmitting(false);
+    try {
+      if (formMode === "create") {
+        const { data, error } = await supabase
+          .from("knowledge_base_articles")
+          .insert([
+            {
+              title: formArticle.title,
+              content: formArticle.content,
+              category: formArticle.category,
+              status: "draft",
+              author_id,
+            },
+          ])
+          .select();
+
+        if (error) throw error;
+        setArticles([...(data || []), ...articles]);
+        resetForm();
+        alert("Article created successfully!");
+      } else if (formMode === "edit" && formArticle.id) {
+        const { data, error } = await supabase
+          .from("knowledge_base_articles")
+          .update({
+            title: formArticle.title,
+            content: formArticle.content,
+            category: formArticle.category,
+            status: formArticle.status,
+          })
+          .eq("id", formArticle.id)
+          .select();
+
+        if (error) throw error;
+
+        setArticles(
+          articles.map((a) =>
+            a.id === formArticle.id ? { ...a, ...formArticle } as Article : a
+          )
+        );
+        resetForm();
+        alert("Article updated successfully!");
+      }
+    } catch (error) {
+      console.error(error);
+      alert(`Failed to ${formMode} article.`);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  // Delete article
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this article?")) return;
 
-    const { error } = await supabase.from("knowledge_base").delete().eq("id", id);
+    const { error } = await supabase.from("knowledge_base_articles").delete().eq("id", id);
     if (error) {
       console.error(error);
       alert("Failed to delete article.");
     } else {
       setArticles(articles.filter((a) => a.id !== id));
       if (selectedArticle?.id === id) setSelectedArticle(null);
+      alert("Article deleted successfully.");
     }
   };
 
-  // Filtered articles
-  const filteredArticles = articles.filter((article) =>
-    article.title.toLowerCase().includes(search.toLowerCase())
-  );
+  const resetForm = () => {
+    setFormArticle({});
+    setFormMode("create");
+    setShowForm(false);
+  };
 
-  if (loading) return <div className="p-4">Loading articles...</div>;
+  const filteredArticles = articles.filter((article) => {
+    const matchesSearch =
+      article.title.toLowerCase().includes(search.toLowerCase()) ||
+      article.content.toLowerCase().includes(search.toLowerCase()) ||
+      article.category.toLowerCase().includes(search.toLowerCase());
+
+    const matchesCategory = activeTab === "all" || article.category === activeTab;
+    return matchesSearch && matchesCategory;
+  });
+
+  if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6 text-blue-600">Knowledge Base</h1>
-
-      {/* Search Bar */}
-      <input
-        type="text"
-        placeholder="Search articles..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        className="border border-gray-300 rounded-md p-2 w-full mb-6 focus:outline-none focus:ring-2 focus:ring-blue-400"
-      />
-
-      {/* Form */}
-      <div className="mb-8 p-4 bg-white shadow rounded-md border">
-        <h2 className="text-xl font-semibold mb-3">
-          {formMode === "create" ? "Create New Article" : "Edit Article"}
-        </h2>
-
+    <Layout currentUser={currentUser} title="Knowledge Base">
+      {/* Search & New Article */}
+      <div className="flex flex-col sm:flex-row gap-4 mb-6">
         <input
           type="text"
-          placeholder="Title"
-          value={formArticle.title || ""}
-          onChange={(e) => setFormArticle({ ...formArticle, title: e.target.value })}
-          className="border rounded p-2 w-full mb-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+          placeholder="Search articles..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="flex-grow px-4 py-2 border rounded-lg"
         />
-
-        <input
-          type="text"
-          placeholder="Category"
-          value={formArticle.category || ""}
-          onChange={(e) => setFormArticle({ ...formArticle, category: e.target.value })}
-          className="border rounded p-2 w-full mb-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
-        />
-
-        <textarea
-          placeholder="Content"
-          value={formArticle.content || ""}
-          onChange={(e) => setFormArticle({ ...formArticle, content: e.target.value })}
-          className="border rounded p-2 w-full mb-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
-          rows={5}
-        />
-
-        <div className="flex gap-2 mt-2">
-          <button
-            onClick={handleSubmit}
-            disabled={submitting}
-            className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
-          >
-            {formMode === "create" ? "Create" : "Update"}
-          </button>
-          {formMode === "edit" && (
-            <button
-              onClick={() => {
-                setFormArticle({});
-                setFormMode("create");
-              }}
-              className="bg-gray-300 hover:bg-gray-400 px-4 py-2 rounded"
-            >
-              Cancel
-            </button>
-          )}
-        </div>
+        <button
+          onClick={() => setShowForm(!showForm)}
+          className="bg-blue-600 text-white px-6 py-2 rounded-lg"
+        >
+          {showForm ? "Close" : "New Article"}
+        </button>
       </div>
 
-      {/* Articles Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {filteredArticles.map((article) => (
-          <div
-            key={article.id}
-            className="border rounded-md p-4 bg-white shadow hover:shadow-lg transition cursor-pointer relative"
+      {/* Categories */}
+      <div className="flex flex-wrap gap-2 mb-6">
+        <button
+          className={`px-4 py-2 rounded-full ${activeTab === "all" ? "bg-blue-100" : "bg-gray-200"}`}
+          onClick={() => setActiveTab("all")}
+        >
+          All
+        </button>
+        {categories.map((c) => (
+          <button
+            key={c}
+            className={`px-4 py-2 rounded-full ${activeTab === c ? "bg-blue-100" : "bg-gray-200"}`}
+            onClick={() => setActiveTab(c)}
           >
-            <h2 className="font-semibold text-lg">{article.title}</h2>
-            <p className="text-sm text-gray-500 mb-2">{article.category}</p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  setSelectedArticle(article);
-                }}
-                className="text-blue-500 hover:underline text-sm"
-              >
-                View
-              </button>
-              <button
-                onClick={() => {
-                  setFormMode("edit");
-                  setFormArticle(article);
-                  window.scrollTo({ top: 0, behavior: "smooth" });
-                }}
-                className="text-green-500 hover:underline text-sm"
-              >
-                Edit
-              </button>
-              <button
-                onClick={() => handleDelete(article.id)}
-                className="text-red-500 hover:underline text-sm"
-              >
-                Delete
-              </button>
+            {c}
+          </button>
+        ))}
+      </div>
+
+      {/* Form */}
+      {showForm && (
+        <div className="bg-white p-6 rounded-lg shadow mb-6">
+          <h2 className="text-xl font-semibold mb-4">{formMode === "create" ? "Create Article" : "Edit Article"}</h2>
+          <input
+            type="text"
+            placeholder="Title"
+            value={formArticle.title || ""}
+            onChange={(e) => setFormArticle({ ...formArticle, title: e.target.value })}
+            className="w-full px-4 py-2 border rounded-lg mb-4"
+          />
+          <select
+            value={formArticle.category || ""}
+            onChange={(e) => setFormArticle({ ...formArticle, category: e.target.value })}
+            className="w-full px-4 py-2 border rounded-lg mb-4"
+          >
+            <option value="">Select category</option>
+            {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <textarea
+            placeholder="Content"
+            value={formArticle.content || ""}
+            onChange={(e) => setFormArticle({ ...formArticle, content: e.target.value })}
+            className="w-full px-4 py-2 border rounded-lg mb-4"
+            rows={6}
+          />
+          <div className="flex gap-3">
+            <button
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="bg-blue-600 text-white px-6 py-2 rounded-lg"
+            >
+              {submitting ? "Processing..." : formMode === "create" ? "Create" : "Update"}
+            </button>
+            <button onClick={resetForm} className="bg-gray-200 px-6 py-2 rounded-lg">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Articles Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredArticles.map((article) => (
+          <div key={article.id} className="bg-white p-4 rounded-lg shadow border border-gray-100">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-xs font-medium bg-blue-100 px-2 py-1 rounded-full">{article.category}</span>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => { setFormMode("edit"); setFormArticle(article); setShowForm(true); window.scrollTo(0,0); }}
+                  className="text-blue-600"
+                >
+                  Edit
+                </button>
+                <button onClick={() => handleDelete(article.id)} className="text-red-600">Delete</button>
+              </div>
             </div>
+            <h3 className="font-semibold mb-2 line-clamp-2">{article.title}</h3>
+            <p className="text-gray-600 line-clamp-3">{article.content}</p>
+            <button onClick={() => setSelectedArticle(article)} className="text-blue-600 mt-2">Read More</button>
           </div>
         ))}
       </div>
 
-      {/* Selected Article Modal */}
+      {/* Modal */}
       {selectedArticle && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white p-6 rounded-lg max-w-2xl w-full relative">
-            <h2 className="text-2xl font-bold mb-4">{selectedArticle.title}</h2>
-            <p className="text-gray-700 whitespace-pre-wrap mb-4">{selectedArticle.content}</p>
-            <p className="text-sm text-gray-500 mb-2">Category: {selectedArticle.category}</p>
-            <p className="text-sm text-gray-400">Created at: {new Date(selectedArticle.created_at).toLocaleString()}</p>
-            <button
-              onClick={() => setSelectedArticle(null)}
-              className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-            >
-              Close
-            </button>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white p-6 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto flex flex-col">
+            <div className="flex justify-between items-start mb-4">
+              <h2 className="text-2xl font-bold">{selectedArticle.title}</h2>
+              <button onClick={() => setSelectedArticle(null)}>Close</button>
+            </div>
+            <span className="inline-block text-xs bg-blue-100 px-2 py-1 rounded-full mb-2">{selectedArticle.category}</span>
+            <p className="whitespace-pre-wrap">{selectedArticle.content}</p>
           </div>
         </div>
       )}
-    </div>
+    </Layout>
   );
 };
 

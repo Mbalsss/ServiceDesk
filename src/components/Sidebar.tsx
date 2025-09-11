@@ -4,12 +4,18 @@ import {
   Users, BarChart3, Bot, MessageSquare, Settings, List, Search, ClipboardList, HelpCircle, Wrench, Plus, User, LogOut
 } from 'lucide-react';
 
-
 // Sidebar link component
-const SidebarLink = ({ icon, text, active, onClick }) => (
+interface SidebarLinkProps {
+  icon: React.ReactNode;
+  text: string;
+  active: boolean;
+  onClick: () => void;
+}
+
+const SidebarLink: React.FC<SidebarLinkProps> = ({ icon, text, active, onClick }) => (
   <a
     href="#"
-    onClick={onClick}
+    onClick={(e) => { e.preventDefault(); onClick(); }}
     className={`flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors ${
       active ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'
     }`}
@@ -24,9 +30,8 @@ interface SidebarProps {
   activeView: string;
   onViewChange: (view: string) => void;
   logout: () => void;
-  onOpenCreateTicket?: () => void; // This is for user role's "Create Ticket"
-  setChatOpen?: (open: boolean) => void; // For ServiceDeskChatbot
-  setTeamsChatOpen?: (open: boolean) => void; // For TeamsChatWrapper
+  onOpenCreateTicket?: () => void; // For user
+  setChatOpen?: (open: boolean) => void; // For chat support
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -36,8 +41,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   logout,
   onOpenCreateTicket,
   setChatOpen,
-  setTeamsChatOpen, // Destructure the new prop here
 }) => {
+
   // Menu configuration
   const menuConfig: Record<string, any[]> = {
     admin: [
@@ -58,19 +63,27 @@ const Sidebar: React.FC<SidebarProps> = ({
       { id: "dashboard", label: "Dashboard", icon: <Home size={20} /> },
       { id: "ticketsPage", label: "Tickets", icon: <List size={20} /> },
       { id: "field_report", label: "Field Reports", icon: <ClipboardList size={20} /> },
-      // Link to open Teams chat
-      { id: "team_chat", label: "Team Chat", icon: <Users size={20} />, action: () => setTeamsChatOpen?.(true) },
-      // Link to the 'scheduler' view
       { id: "scheduler", label: "Schedule", icon: <Calendar size={20} /> },
       { id: "equipment", label: "Equipment", icon: <Wrench size={20} /> },
-      { id: "knowledge_base", label: "Knowledge Base", icon: <HelpCircle size={20} /> }, // Simplified action if it just changes view
     ],
     user: [
       { id: "dashboard", label: "Dashboard", icon: <Home size={20} /> },
       { id: "my_tickets", label: "My Tickets", icon: <List size={20} /> },
-      { id: "create", label: "Create Ticket", icon: <Plus size={20} />, action: onOpenCreateTicket },
-      // Link to open Teams chat for user (or generic chat support)
-      { id: "chat_support", label: "Chat with Support", icon: <MessageSquare size={20} />, action: () => setTeamsChatOpen?.(true) },
+      { 
+        id: "create", 
+        label: "Create Ticket", 
+        icon: <Plus size={20} />, 
+        action: () => {
+          if (onOpenCreateTicket) onOpenCreateTicket();
+          else onViewChange("create_ticket"); // fallback
+        } 
+      },
+      { 
+        id: "chat_support", 
+        label: "Chat with Support", 
+        icon: <MessageSquare size={20} />, 
+        action: () => setChatOpen?.(true) 
+      },
       { id: "profile_settings", label: "Settings", icon: <User size={20} /> },
     ],
   };

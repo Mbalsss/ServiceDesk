@@ -1,10 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import { Ticket, Clock, User, AlertCircle, RefreshCw, Info, Filter } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+// src/components/technician/AssignedTickets.tsx
+import React, { useState, useEffect } from "react";
+import { supabase } from "../../lib/supabase";
 
 interface AssignedTicketsProps {
   currentUser: { id: string; name: string; email: string; role: string };
-  onViewTicket: (ticket: any) => void;
+  onViewTicket: (ticket: TicketType) => void;
+}
+
+interface CommentType {
+  id: string;
+  ticket_id: string;
+  technician_id: string;
+  technician_name: string;
+  comment: string;
+  created_at: string;
 }
 
 interface TicketType {
@@ -24,124 +33,100 @@ interface TicketType {
   created_at: string;
   updated_at: string;
   sla_deadline?: string;
+  internal_comments?: CommentType[];
 }
 
 const AssignedTickets: React.FC<AssignedTicketsProps> = ({ currentUser, onViewTicket }) => {
   const [tickets, setTickets] = useState<TicketType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filterStatus, setFilterStatus] = useState('all');
 
   const fetchAssignedTickets = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      console.log('Fetching tickets for user:', currentUser.id);
-
       const { data: ticketsData, error: ticketsError } = await supabase
-        .from('tickets')
-        .select('*')
-        .eq('assignee_id', currentUser.id)
-        .order('created_at', { ascending: false });
+        .from("tickets")
+        .select(`
+          *,
+          requester:profiles!tickets_requester_id_fkey(full_name)
+        `)
+        .eq("assignee_id", currentUser.id)
+        .order("created_at", { ascending: false });
 
-      if (ticketsError) {
-        console.error('Supabase error:', ticketsError);
-        throw ticketsError;
-      }
-
-      console.log('Raw tickets data:', ticketsData);
-
-      if (!ticketsData || ticketsData.length === 0) {
-        console.log('No tickets found for user');
-        setTickets([]);
-        setLoading(false);
-        return;
-      }
-
-      const requesterIds = [...new Set(ticketsData.map(t => t.requester_id).filter(Boolean))];
-      let usersMap = new Map();
-      
-      if (requesterIds.length > 0) {
-        const { data: usersData, error: usersError } = await supabase
-          .from('profiles')
-          .select('id, full_name')
-          .in('id', requesterIds);
-
-        if (usersError) {
-          console.error('Error fetching users:', usersError);
-        } else {
-          usersData?.forEach(user => usersMap.set(user.id, user.full_name));
-        }
-      }
+      if (ticketsError) throw ticketsError;
 
       const transformedTickets: TicketType[] = ticketsData.map(ticket => ({
         ...ticket,
-        requester_name: usersMap.get(ticket.requester_id) || 'Unknown',
+        requester_name: ticket.requester?.full_name || "Unknown",
         assignee_name: currentUser.name,
-        estimatedTime: ticket.estimated_time || '2 hours', // Fixed field name
+        estimatedTime: ticket.estimated_time || "Not specified",
       }));
 
-      console.log('Transformed tickets:', transformedTickets);
       setTickets(transformedTickets);
     } catch (err) {
-      console.error('Error in fetchAssignedTickets:', err);
-      setError('Failed to load assigned tickets. Please try again.');
+      console.error("Error fetching tickets:", err);
+      setError("Failed to load assigned tickets. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (currentUser?.id) {
-      fetchAssignedTickets();
-    }
+    if (currentUser?.id) fetchAssignedTickets();
   }, [currentUser.id]);
 
-  const filteredTickets = filterStatus === 'all'
-    ? tickets
-    : tickets.filter(ticket => ticket.status === filterStatus);
+  const handleUpdateTicketStatus = async (ticketId: string, status: string) => {
+    try {
+      const { error } = await supabase
+        .from('tickets')
+        .update({ status, updated_at: new Date().toISOString() })
+        .eq('id', ticketId);
 
-  const getStatusColor = (status: string) => ({
-    open: 'text-blue-600 bg-blue-100',
-    in_progress: 'text-orange-600 bg-orange-100',
-    resolved: 'text-green-600 bg-green-100',
-    closed: 'text-gray-600 bg-gray-100',
-  }[status] || 'text-gray-600 bg-gray-100');
+      if (error) throw error;
+      fetchAssignedTickets();
+    } catch (err) {
+      console.error('Error updating ticket:', err);
+    }
+  };
 
-  const getPriorityColor = (priority: string) => ({
+  const statusColor = (status: string) => ({
+    open: 'text-blue-700 bg-blue-100 border-blue-200',
+    in_progress: 'text-orange-700 bg-orange-100 border-orange-200',
+    resolved: 'text-green-700 bg-green-100 border-green-200',
+    closed: 'text-gray-700 bg-gray-100 border-gray-200',
+  }[status] || 'text-gray-700 bg-gray-100 border-gray-200');
+
+  const priorityColor = (priority: string) => ({
     critical: 'text-red-700 bg-red-100',
     high: 'text-orange-700 bg-orange-100',
     medium: 'text-yellow-700 bg-yellow-100',
     low: 'text-gray-700 bg-gray-100',
   }[priority] || 'text-gray-700 bg-gray-100');
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'open': return <Clock className="w-4 h-4" />;
-      case 'in_progress': return <AlertCircle className="w-4 h-4" />;
-      case 'resolved': return <Ticket className="w-4 h-4" />;
-      case 'closed': return <User className="w-4 h-4" />;
-      default: return <Ticket className="w-4 h-4" />;
-    }
-  };
-
-  const handleCardClick = (ticket: TicketType, e: React.MouseEvent) => {
-    // Prevent click if the click was on a button or interactive element
-    if ((e.target as HTMLElement).tagName === 'BUTTON' || 
-        (e.target as HTMLElement).closest('button')) {
-      return;
-    }
-    console.log('Viewing ticket:', ticket);
-    onViewTicket(ticket);
-  };
-
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="flex flex-col items-center">
-          <RefreshCw className="w-8 h-8 animate-spin text-blue-600 mb-2" />
-          <div className="text-lg text-gray-600">Loading tickets...</div>
+      <div className="p-6">
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">My Assigned Tickets</h2>
+          <p className="text-gray-600">Loading tickets...</p>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+          {[1, 2, 3].map((n) => (
+            <div key={n} className="bg-gray-50 border border-gray-200 rounded-lg p-5 animate-pulse">
+              <div className="h-6 bg-gray-200 rounded mb-4"></div>
+              <div className="h-4 bg-gray-200 rounded mb-2"></div>
+              <div className="h-4 bg-gray-200 rounded mb-4"></div>
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="h-4 bg-gray-200 rounded"></div>
+                <div className="h-4 bg-gray-200 rounded"></div>
+                <div className="h-4 bg-gray-200 rounded"></div>
+                <div className="h-4 bg-gray-200 rounded"></div>
+              </div>
+              <div className="h-8 bg-gray-200 rounded"></div>
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -149,123 +134,93 @@ const AssignedTickets: React.FC<AssignedTicketsProps> = ({ currentUser, onViewTi
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
-        <div className="text-red-600 font-medium mb-2">Error Loading Tickets</div>
-        <div className="text-red-500 mb-4">{error}</div>
-        <button
-          onClick={fetchAssignedTickets}
-          className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 flex items-center gap-2 mx-auto"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Try Again
-        </button>
+      <div className="p-6">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+          <div className="text-red-600 font-medium mb-2">Error Loading Tickets</div>
+          <div className="text-red-500 mb-4">{error}</div>
+          <button
+            onClick={fetchAssignedTickets}
+            className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+          >
+            Try Again
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 p-6">
-      {/* Filter Controls */}
-      <div className="flex items-center justify-between bg-white p-4 rounded-lg shadow border border-gray-200">
-        <h2 className="text-xl font-semibold text-gray-800">My Assigned Tickets</h2>
-        <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-gray-500" />
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="all">All Statuses</option>
-            <option value="open">Open</option>
-            <option value="in_progress">In Progress</option>
-            <option value="resolved">Resolved</option>
-            <option value="closed">Closed</option>
-          </select>
-          <button
-            onClick={fetchAssignedTickets}
-            className="p-2 bg-gray-100 rounded-md hover:bg-gray-200"
-            title="Refresh tickets"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
-        </div>
+    <div className="p-6">
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">My Assigned Tickets</h2>
+        <p className="text-gray-600">
+          {tickets.length} tickets assigned to you
+        </p>
       </div>
 
-      {/* Tickets Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredTickets.length === 0 ? (
-          <div className="col-span-full text-center py-12 bg-white rounded-lg shadow border border-gray-200">
-            <Ticket className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-            <p className="text-gray-500 mb-1">
-              {filterStatus === 'all'
-                ? 'No tickets assigned to you yet.'
-                : `No ${filterStatus.replace('_', ' ')} tickets.`}
-            </p>
-            <p className="text-sm text-gray-400">Tickets assigned to you will appear here.</p>
+      {tickets.length === 0 ? (
+        <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl border-2 border-dashed border-gray-300">
+          <div className="w-20 h-20 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
           </div>
-        ) : (
-          filteredTickets.map(ticket => (
-            <div
-              key={ticket.id}
-              className="bg-white shadow-md rounded-xl border border-gray-200 p-5 hover:shadow-lg transform transition cursor-pointer flex flex-col justify-between"
-              onClick={(e) => handleCardClick(ticket, e)}
-            >
-              {ticket.image_url && (
-                <img
-                  src={ticket.image_url}
-                  alt={ticket.title}
-                  className="w-full h-32 object-cover rounded-lg mb-3"
-                />
-              )}
-              
-              <div className="flex justify-between items-start mb-2">
-                <h3 className="text-lg font-semibold text-gray-900 line-clamp-2">
-                  {ticket.title}
-                </h3>
-                <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getPriorityColor(ticket.priority)}`}>
-                  {ticket.priority}
-                </span>
-              </div>
-
-              <div className="space-y-2 text-sm text-gray-600 mb-3">
-                <div className="flex items-center gap-1">
-                  <User className="w-4 h-4" />
-                  <span>Requester: {ticket.requester_name}</span>
+          <p className="text-gray-500 text-lg font-medium mb-2">No assigned tickets</p>
+          <p className="text-gray-400 text-sm">You don't have any tickets assigned to you yet</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+          {tickets.map((ticket) => (
+            <div key={ticket.id} className="bg-gray-50 border border-gray-200 rounded-lg p-5 flex flex-col justify-between transition-all hover:shadow-md">
+              <div>
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="font-semibold text-gray-900 pr-2 line-clamp-1">{ticket.title}</h3>
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-semibold capitalize ${priorityColor(ticket.priority)}`}>
+                    {ticket.priority}
+                  </span>
                 </div>
-                <div>Category: {ticket.category}</div>
-                <div>Type: {ticket.type.replace('_', ' ')}</div>
-                {ticket.estimatedTime && (
-                  <div className="flex items-center gap-1">
-                    <Clock className="w-4 h-4" />
-                    <span>Est. Time: {ticket.estimatedTime}</span>
+                <p className="text-sm text-gray-600 mb-4 line-clamp-2">{ticket.description}</p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm text-gray-500 border-t pt-4">
+                  <span><strong>ID:</strong> {ticket.id.slice(0, 8)}...</span>
+                  <span className="capitalize"><strong>Type:</strong> {ticket.type.replace('_', ' ')}</span>
+                  <span><strong>Requester:</strong> {ticket.requester_name}</span>
+                  <span><strong>Est. Time:</strong> {ticket.estimatedTime}</span>
+                  <div className="col-span-2 flex items-center">
+                    <strong>Status:</strong>
+                    <span className={`ml-2 px-2 py-0.5 rounded text-xs capitalize border ${statusColor(ticket.status)}`}>
+                      {ticket.status.replace('_', ' ')}
+                    </span>
                   </div>
+                </div>
+              </div>
+              <div className="mt-4 pt-4 border-t flex gap-2">
+                <button
+                  onClick={() => onViewTicket(ticket)}
+                  className="flex-1 px-3 py-2 bg-gray-200 text-gray-800 text-sm font-semibold rounded-md hover:bg-gray-300 transition-colors min-w-[120px]"
+                >
+                  View Details
+                </button>
+                {ticket.status === 'open' && (
+                  <button
+                    onClick={() => handleUpdateTicketStatus(ticket.id, 'in_progress')}
+                    className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md hover:bg-blue-700 transition-colors min-w-[120px]"
+                  >
+                    Start Work
+                  </button>
+                )}
+                {ticket.status === 'in_progress' && (
+                  <button
+                    onClick={() => handleUpdateTicketStatus(ticket.id, 'resolved')}
+                    className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md hover:bg-blue-700 transition-colors min-w-[120px]"
+                  >
+                    Resolve
+                  </button>
                 )}
               </div>
-
-              <div className="flex items-center justify-between mt-auto pt-3 border-t border-gray-100">
-                <span className={`px-2 py-1 text-xs rounded-full flex items-center gap-1 ${getStatusColor(ticket.status)}`}>
-                  {getStatusIcon(ticket.status)}
-                  {ticket.status.replace('_', ' ')}
-                </span>
-                <span className="text-xs text-gray-400">
-                  {new Date(ticket.created_at).toLocaleDateString()}
-                </span>
-              </div>
-
-              <button 
-                className="mt-3 px-3 py-2 bg-blue-100 text-blue-700 rounded-lg font-medium hover:bg-blue-200 w-full text-center"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  console.log('View details clicked for:', ticket.id);
-                  onViewTicket(ticket);
-                }}
-              >
-                View Details →
-              </button>
             </div>
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
