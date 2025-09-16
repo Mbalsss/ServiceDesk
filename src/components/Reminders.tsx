@@ -79,7 +79,7 @@ const Reminders = () => {
           setReminderList(remindersData);
         }
       } catch (error) {
-        console.error('Failed to load data:', error);
+        console.error('Failed To Load Data:', error);
       } finally {
         setIsLoading(false);
       }
@@ -103,9 +103,9 @@ const Reminders = () => {
 
   const filteredReminders = reminderList.filter(reminder => {
     if (filter === 'all') return true;
-    if (filter === 'pending') return !reminder.is_completed;
-    if (filter === 'completed') return reminder.is_completed;
-    if (filter === 'overdue') return !reminder.is_completed && new Date(reminder.due_date) < new Date();
+    if (filter === 'Pending') return !reminder.is_completed;
+    if (filter === 'Completed') return reminder.is_completed;
+    if (filter === 'Overdue') return !reminder.is_completed && new Date(reminder.due_date) < new Date();
     return reminder.type === filter;
   });
 
@@ -114,7 +114,7 @@ const Reminders = () => {
   const completedReminders = reminderList.filter(r => r.is_completed);
 
   const getTypeColor = (type: string) => {
-    switch (type) {
+    switch (type.toLowerCase()) {
       case 'ticket_followup': return 'text-blue-600 bg-blue-100 border-blue-200';
       case 'maintenance': return 'text-red-600 bg-red-100 border-red-200';
       case 'meeting': return 'text-green-600 bg-green-100 border-green-200';
@@ -124,7 +124,7 @@ const Reminders = () => {
   };
 
   const getTypeIcon = (type: string) => {
-    switch (type) {
+    switch (type.toLowerCase()) {
       case 'ticket_followup': return <AlertTriangle className="w-4 h-4" />;
       case 'maintenance': return <Clock className="w-4 h-4" />;
       case 'meeting': return <Calendar className="w-4 h-4" />;
@@ -145,7 +145,7 @@ const Reminders = () => {
         .eq('id', id);
 
       if (error) {
-        console.error('Error completing reminder:', error);
+        console.error('Error Completing Reminder:', error);
         return;
       }
 
@@ -154,7 +154,7 @@ const Reminders = () => {
         prev.map(r => r.id === id ? { ...r, is_completed: true } : r)
       );
     } catch (error) {
-      console.error('Failed to complete reminder:', error);
+      console.error('Failed To Complete Reminder:', error);
     }
   };
 
@@ -166,20 +166,20 @@ const Reminders = () => {
         .eq('id', id);
 
       if (error) {
-        console.error('Error deleting reminder:', error);
+        console.error('Error Deleting Reminder:', error);
         return;
       }
 
       // Update local state optimistically
       setReminderList(prev => prev.filter(r => r.id !== id));
     } catch (error) {
-      console.error('Failed to delete reminder:', error);
+      console.error('Failed To Delete Reminder:', error);
     }
   };
 
   const handleAddReminder = async () => {
     if (!newReminder.title.trim()) {
-      alert('Please enter a title for the reminder');
+      alert('Please Enter A Title For The Reminder');
       return;
     }
     
@@ -202,7 +202,7 @@ const Reminders = () => {
         `);
 
       if (error) {
-        console.error('Error adding reminder:', error);
+        console.error('Error Adding Reminder:', error);
         return;
       }
 
@@ -219,7 +219,7 @@ const Reminders = () => {
         });
       }
     } catch (error) {
-      console.error('Failed to add reminder:', error);
+      console.error('Failed To Add Reminder:', error);
     } finally {
       setIsSubmitting(false);
     }
@@ -249,7 +249,7 @@ const Reminders = () => {
       <div className="p-6 flex items-center justify-center h-64">
         <div className="text-center">
           <Loader className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
-          <p className="mt-4 text-gray-600">Loading reminders...</p>
+          <p className="mt-4 text-gray-600">Loading Reminders...</p>
         </div>
       </div>
     );
@@ -261,12 +261,12 @@ const Reminders = () => {
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Service Desk Reminders</h2>
-          <p className="text-gray-600">Stay on top of important tasks and follow-ups</p>
+          <p className="text-gray-600">Stay On Top Of Important Tasks And Follow-Ups</p>
         </div>
         <button 
           onClick={() => setShowModal(true)} 
           className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          aria-label="Add new reminder"
+          aria-label="Add New Reminder"
         >
           <Plus className="w-4 h-4" />
           <span>New Reminder</span>
@@ -302,7 +302,7 @@ const Reminders = () => {
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
         <div className="flex items-center mb-3">
           <Filter className="w-5 h-5 text-gray-500 mr-2" />
-          <h3 className="font-medium text-gray-700">Filter reminders</h3>
+          <h3 className="font-medium text-gray-700">Filter Reminders</h3>
         </div>
         <div className="flex flex-wrap gap-2">
           {['all','pending','overdue','completed','ticket_followup','maintenance','meeting','general'].map(f => (
@@ -312,7 +312,7 @@ const Reminders = () => {
               className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${filter===f?'bg-blue-100 text-blue-700 border border-blue-200':'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
               aria-pressed={filter === f}
             >
-              {f.replace('_',' ')}
+              {f.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
             </button>
           ))}
         </div>
@@ -338,16 +338,16 @@ const Reminders = () => {
                 </div>
                 <div>
                   <h3 className={`font-medium ${r.is_completed?'text-gray-500 line-through':'text-gray-900'}`}>
-                    {r.title}
+                    {r.title.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
                   </h3>
                   <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getTypeColor(r.type)} mt-1`}>
-                    {r.type.replace('_',' ')}
+                    {r.type.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
                   </span>
                 </div>
               </div>
               {r.description && (
                 <p className={`text-sm mb-3 ${r.is_completed?'text-gray-400':'text-gray-600'}`}>
-                  {r.description}
+                  {r.description.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
                 </p>
               )}
               <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 text-sm text-gray-500 mt-2">
@@ -360,7 +360,7 @@ const Reminders = () => {
                 {r.profiles && (
                   <div className="flex items-center">
                     <User className="w-4 h-4 mr-1" />
-                    <span>{r.profiles.full_name}</span>
+                    <span>{r.profiles.full_name.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</span>
                   </div>
                 )}
               </div>
@@ -370,7 +370,7 @@ const Reminders = () => {
                 <button 
                   onClick={() => handleCompleteReminder(r.id)} 
                   className="p-2 text-green-600 hover:text-green-700 hover:bg-green-50 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-green-500"
-                  aria-label="Mark as completed"
+                  aria-label="Mark As Completed"
                 >
                   <CheckCircle className="w-5 h-5"/>
                 </button>
@@ -378,151 +378,107 @@ const Reminders = () => {
               {r.is_completed && (
                 <div className="flex items-center text-green-600 mr-2">
                   <CheckCircle className="w-4 h-4 mr-1"/>
-                  <span className="text-xs font-medium">COMPLETED</span>
+                  <span className="text-xs font-medium">Completed</span>
                 </div>
               )}
               {isOverdue(r.due_date, r.is_completed) && (
                 <div className="flex items-center text-red-600 mr-2">
                   <AlertTriangle className="w-4 h-4 mr-1"/>
-                  <span className="text-xs font-medium">OVERDUE</span>
+                  <span className="text-xs font-medium">Overdue</span>
                 </div>
               )}
               <button 
-                onClick={() => handleDeleteReminder(r.id)} 
-                className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-red-500"
-                aria-label="Delete reminder"
+                onClick={() => handleDeleteReminder(r.id)}
+                className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-red-500"
+                aria-label="Delete Reminder"
               >
-                <Trash2 className="w-4 h-4"/>
+                <Trash2 className="w-5 h-5"/>
               </button>
             </div>
           </div>
         ))}
-        {filteredReminders.length === 0 && (
-          <div className="text-center py-12 bg-white rounded-lg shadow-sm border border-gray-200">
-            <Bell className="w-12 h-12 text-gray-400 mx-auto mb-4"/>
-            <p className="text-gray-500">No reminders found matching your criteria.</p>
-            <button 
-              onClick={() => setFilter('all')}
-              className="mt-4 text-blue-600 hover:text-blue-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-lg px-3 py-1"
-            >
-              View all reminders
-            </button>
-          </div>
-        )}
       </div>
 
-      {/* New Reminder Modal */}
+      {/* Add Reminder Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">Add New Reminder</h3>
-              <button 
-                onClick={() => setShowModal(false)}
-                className="text-gray-500 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 rounded-full p-1"
-                aria-label="Close modal"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-6 relative">
+            <button 
+              onClick={() => setShowModal(false)}
+              className="absolute top-3 right-3 p-2 rounded-full hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-300"
+              aria-label="Close Modal"
+            >
+              <X className="w-5 h-5"/>
+            </button>
+            <h2 className="text-xl font-bold mb-4">Add New Reminder</h2>
             <div className="space-y-4">
               <div>
-                <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1">
-                  Title *
-                </label>
+                <label className="block text-sm font-medium mb-1">Title</label>
                 <input 
-                  id="title"
-                  type="text" 
-                  placeholder="Enter reminder title" 
-                  value={newReminder.title} 
-                  onChange={e => setNewReminder({...newReminder, title: e.target.value})} 
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
+                  type="text"
+                  value={newReminder.title}
+                  onChange={e => setNewReminder({...newReminder, title: e.target.value})}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter Reminder Title"
                 />
               </div>
               <div>
-                <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-                  Description
-                </label>
-                <textarea
-                  id="description"
-                  placeholder="Enter description (optional)" 
-                  value={newReminder.description} 
-                  onChange={e => setNewReminder({...newReminder, description: e.target.value})} 
-                  rows={3}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                <label className="block text-sm font-medium mb-1">Description</label>
+                <textarea 
+                  value={newReminder.description}
+                  onChange={e => setNewReminder({...newReminder, description: e.target.value})}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter Reminder Description"
                 />
               </div>
               <div>
-                <label htmlFor="assignee" className="block text-sm font-medium text-gray-700 mb-1">
-                  Assignee
-                </label>
-                <select
-                  id="assignee"
-                  value={newReminder.assignee_id} 
-                  onChange={e => setNewReminder({...newReminder, assignee_id: e.target.value})} 
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                <label className="block text-sm font-medium mb-1">Type</label>
+                <select 
+                  value={newReminder.type}
+                  onChange={e => setNewReminder({...newReminder, type: e.target.value})}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="">Unassigned</option>
-                  {profiles.map(profile => (
-                    <option key={profile.id} value={profile.id}>
-                      {profile.full_name}
-                    </option>
+                  {['general','ticket_followup','maintenance','meeting'].map(t => (
+                    <option key={t} value={t}>{t.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label htmlFor="dueDate" className="block text-sm font-medium text-gray-700 mb-1">
-                  Due Date
-                </label>
-                <input 
-                  id="dueDate"
-                  type="datetime-local" 
-                  value={formatDateForInput(newReminder.due_date)} 
-                  onChange={e => setNewReminder({...newReminder, due_date: e.target.value})} 
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label htmlFor="type" className="block text-sm font-medium text-gray-700 mb-1">
-                  Type
-                </label>
+                <label className="block text-sm font-medium mb-1">Assignee</label>
                 <select 
-                  id="type"
-                  value={newReminder.type} 
-                  onChange={e => setNewReminder({...newReminder, type: e.target.value})} 
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={newReminder.assignee_id}
+                  onChange={e => setNewReminder({...newReminder, assignee_id: e.target.value})}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="ticket_followup">Ticket Follow-up</option>
-                  <option value="maintenance">Maintenance</option>
-                  <option value="meeting">Meeting</option>
-                  <option value="general">General</option>
+                  <option value="">Select Assignee</option>
+                  {profiles.map(p => (
+                    <option key={p.id} value={p.id}>{p.full_name.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</option>
+                  ))}
                 </select>
               </div>
-            </div>
-            <div className="flex mt-6 space-x-3">
-              <button 
-                onClick={handleAddReminder} 
-                disabled={isSubmitting}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader className="w-4 h-4 animate-spin mr-2" />
-                    Adding...
-                  </>
-                ) : 'Add Reminder'}
-              </button>
-              <button 
-                onClick={() => setShowModal(false)} 
-                className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
-              >
-                Cancel
-              </button>
+              <div>
+                <label className="block text-sm font-medium mb-1">Due Date</label>
+                <input 
+                  type="datetime-local"
+                  value={formatDateForInput(newReminder.due_date)}
+                  onChange={e => setNewReminder({...newReminder, due_date: e.target.value})}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="flex justify-end mt-4">
+                <button 
+                  onClick={handleAddReminder} 
+                  disabled={isSubmitting}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {isSubmitting ? 'Adding...' : 'Add Reminder'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 };

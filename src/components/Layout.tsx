@@ -1,22 +1,27 @@
-// src/components/Layout.tsx
-import React from "react";
+// Layout.tsx
+import React, { ReactNode } from "react";
 import Header from "./Header";
+import Sidebar from "./Sidebar";
+import "./Layout.css";
 
 interface LayoutProps {
-  currentUser: string;
-  children: React.ReactNode;
+  children: ReactNode;
+  currentUser: string; // must be a string to match Header
 }
 
-const Layout: React.FC<LayoutProps> = ({ currentUser, children }) => {
+const Layout: React.FC<LayoutProps> = ({ children, currentUser }) => {
   return (
-    <div className="min-h-screen flex flex-col">
-      {/* Header */}
+    <div className="layout-container">
+      {/* Top Header */}
       <Header currentUser={currentUser} />
 
-      {/* Page Content */}
-      <main className="flex-1 p-6 bg-gray-50">
-        {children}
-      </main>
+      <div className="layout-body">
+        {/* Sidebar on the left */}
+        <Sidebar />
+
+        {/* Main content */}
+        <main className="layout-main">{children}</main>
+      </div>
     </div>
   );
 };

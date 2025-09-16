@@ -1,14 +1,7 @@
 // src/components/technician/TechnicianDashboard.tsx
 import React, { useState, useEffect } from 'react';
 import { Ticket, Clock, Activity, AlertTriangle, X, MessageSquare, User, AlertCircle } from 'lucide-react';
-import AssignedTickets from './AssignedTickets';
-import UnassignedTicketsQueue from './UnassignedTicketsQueue';
-import SearchFilterTickets from './SearchFilterTickets';
-import PerformanceOverview from './PerformanceOverview';
-import InternalComments from './InternalComments';
-import FieldReport from './FieldReport';
 import { supabase } from '../../lib/supabase';
-import Layout from './Layout';
 
 interface TechnicianDashboardProps {
   currentUser: { id: string; name: string; email: string; role: string };
@@ -262,11 +255,7 @@ const TechnicianDashboard: React.FC<TechnicianDashboardProps> = ({ currentUser }
   };
 
   return (
-    <Layout 
-      currentUser={currentUser} 
-      notificationsCount={assignedTickets.length} 
-      title={getTitle()}
-    >
+    <div className="min-h-screen bg-gray-100">
       {/* Notification Area */}
       {(error || success) && (
         <div className={`px-6 py-3 ${error ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
@@ -279,110 +268,116 @@ const TechnicianDashboard: React.FC<TechnicianDashboardProps> = ({ currentUser }
         </div>
       )}
 
-      <div className="space-y-6">
-        {activeView === 'dashboard' && (
-          <>
-            {/* Dashboard Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
-              {dashboardCards.map(card => {
-                const Icon = card.icon;
-                const colorMap = {
-                  blue: { bg: 'bg-blue-100', text: 'text-blue-600' },
-                  orange: { bg: 'bg-orange-100', text: 'text-orange-600' },
-                  yellow: { bg: 'bg-yellow-100', text: 'text-yellow-600' },
-                  red: { bg: 'bg-red-100', text: 'text-red-600' },
-                };
-                return (
-                  <div key={card.title} className="bg-white shadow rounded-lg border border-gray-200 p-5 transition-all hover:shadow-md">
-                    <div className="flex items-center">
-                      <div className={`p-3 rounded-lg ${colorMap[card.color].bg}`}>
-                        <Icon className={`w-6 h-6 ${colorMap[card.color].text}`} />
-                      </div>
-                      <div className="ml-4">
-                        <p className="text-sm text-gray-500">{card.title}</p>
-                        <p className="text-2xl font-bold text-gray-800">{card.value}</p>
-                      </div>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-3">{card.description}</p>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Active Tickets Section */}
-            <div className="bg-white shadow rounded-lg border border-gray-200">
-              <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-                <h2 className="text-lg font-semibold text-gray-800">Your Active Tickets</h2>
-                <span className="text-sm text-gray-500">
-                  {assignedTickets.length} tickets
-                </span>
-              </div>
-              
-              <div className="p-6">
-                {assignedTickets.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Ticket className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-500 mb-2">No tickets assigned to you.</p>
-                    <p className="text-sm text-gray-400">
-                      {loading ? 'Loading...' : 'Check the Available Tickets section to claim new tickets.'}
-                    </p>
-                    <button 
-                      onClick={() => setActiveView('unassigned_tickets')}
-                      className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
-                    >
-                      View Available Tickets
-                    </button>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {assignedTickets.map(ticket => (
-                      <div key={ticket.id} className="bg-gray-50 border border-gray-200 rounded-lg p-5 flex flex-col justify-between transition-all hover:shadow-md">
-                        <div>
-                          <div className="flex justify-between items-start mb-2">
-                            <h3 className="font-semibold text-gray-900 pr-2 line-clamp-1">{ticket.title}</h3>
-                            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold capitalize ${priorityColor(ticket.priority)}`}>
-                              {ticket.priority}
-                            </span>
+      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div className="px-4 py-6 sm:px-0">
+          <h1 className="text-3xl font-bold text-gray-900 mb-6">{getTitle()}</h1>
+          
+          <div className="space-y-6">
+            {activeView === 'dashboard' && (
+              <>
+                {/* Dashboard Stats */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
+                  {dashboardCards.map(card => {
+                    const Icon = card.icon;
+                    const colorMap = {
+                      blue: { bg: 'bg-blue-100', text: 'text-blue-600' },
+                      orange: { bg: 'bg-orange-100', text: 'text-orange-600' },
+                      yellow: { bg: 'bg-yellow-100', text: 'text-yellow-600' },
+                      red: { bg: 'bg-red-100', text: 'text-red-600' },
+                    };
+                    return (
+                      <div key={card.title} className="bg-white shadow rounded-lg border border-gray-200 p-5 transition-all hover:shadow-md">
+                        <div className="flex items-center">
+                          <div className={`p-3 rounded-lg ${colorMap[card.color].bg}`}>
+                            <Icon className={`w-6 h-6 ${colorMap[card.color].text}`} />
                           </div>
-                          <p className="text-sm text-gray-600 mb-4 line-clamp-2">{ticket.description}</p>
-                          <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm text-gray-500 border-t pt-4">
-                            <span><strong>ID:</strong> {ticket.id.slice(0, 8)}...</span>
-                            <span className="capitalize"><strong>Type:</strong> {ticket.type.replace('_', ' ')}</span>
-                            <span><strong>Requester:</strong> {ticket.requester_name}</span>
-                            <span><strong>Est. Time:</strong> {ticket.estimatedTime}</span>
-                            <div className="col-span-2 flex items-center">
-                              <strong>Status:</strong>
-                              <span className={`ml-2 px-2 py-0.5 rounded text-xs capitalize border ${statusColor(ticket.status)}`}>
-                                {ticket.status.replace('_', ' ')}
-                              </span>
+                          <div className="ml-4">
+                            <p className="text-sm text-gray-500">{card.title}</p>
+                            <p className="text-2xl font-bold text-gray-800">{card.value}</p>
+                          </div>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-3">{card.description}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Active Tickets Section */}
+                <div className="bg-white shadow rounded-lg border border-gray-200">
+                  <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                    <h2 className="text-lg font-semibold text-gray-800">Your Active Tickets</h2>
+                    <span className="text-sm text-gray-500">
+                      {assignedTickets.length} tickets
+                    </span>
+                  </div>
+                  
+                  <div className="p-6">
+                    {assignedTickets.length === 0 ? (
+                      <div className="text-center py-8">
+                        <Ticket className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                        <p className="text-gray-500 mb-2">No tickets assigned to you.</p>
+                        <p className="text-sm text-gray-400">
+                          {loading ? 'Loading...' : 'Check the Available Tickets section to claim new tickets.'}
+                        </p>
+                        <button 
+                          onClick={() => setActiveView('unassigned_tickets')}
+                          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
+                        >
+                          View Available Tickets
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                        {assignedTickets.map(ticket => (
+                          <div key={ticket.id} className="bg-gray-50 border border-gray-200 rounded-lg p-5 flex flex-col justify-between transition-all hover:shadow-md">
+                            <div>
+                              <div className="flex justify-between items-start mb-2">
+                                <h3 className="font-semibold text-gray-900 pr-2 line-clamp-1">{ticket.title}</h3>
+                                <span className={`px-2.5 py-1 rounded-full text-xs font-semibold capitalize ${priorityColor(ticket.priority)}`}>
+                                  {ticket.priority}
+                                </span>
+                              </div>
+                              <p className="text-sm text-gray-600 mb-4 line-clamp-2">{ticket.description}</p>
+                              <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm text-gray-500 border-t pt-4">
+                                <span><strong>ID:</strong> {ticket.id.slice(0, 8)}...</span>
+                                <span className="capitalize"><strong>Type:</strong> {ticket.type.replace('_', ' ')}</span>
+                                <span><strong>Requester:</strong> {ticket.requester_name}</span>
+                                <span><strong>Est. Time:</strong> {ticket.estimatedTime}</span>
+                                <div className="col-span-2 flex items-center">
+                                  <strong>Status:</strong>
+                                  <span className={`ml-2 px-2 py-0.5 rounded text-xs capitalize border ${statusColor(ticket.status)}`}>
+                                    {ticket.status.replace('_', ' ')}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="mt-4 pt-4 border-t flex gap-2">
+                              {ticket.status === 'open' && (
+                                <button 
+                                  onClick={() => handleTakeTicket(ticket.id)} 
+                                  className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md hover:bg-blue-700"
+                                >
+                                  Start Work
+                                </button>
+                              )}
+
+                              <button 
+                                onClick={() => openTicketDetails(ticket)} 
+                                className="flex-1 px-3 py-2 bg-gray-200 text-gray-800 text-sm font-semibold rounded-md hover:bg-gray-300"
+                              >
+                                Details
+                              </button>
                             </div>
                           </div>
-                        </div>
-                        <div className="mt-4 pt-4 border-t flex gap-2">
-                          {ticket.status === 'open' && (
-                            <button 
-                              onClick={() => handleTakeTicket(ticket.id)} 
-                              className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md hover:bg-blue-700"
-                            >
-                              Start Work
-                            </button>
-                          )}
-
-                          <button 
-                            onClick={() => openTicketDetails(ticket)} 
-                            className="flex-1 px-3 py-2 bg-gray-200 text-gray-800 text-sm font-semibold rounded-md hover:bg-gray-300"
-                          >
-                            Details
-                          </button>
-                        </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
-                )}
-              </div>
-            </div>
-          </>
-        )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Ticket Detail Modal */}
@@ -508,7 +503,7 @@ const TechnicianDashboard: React.FC<TechnicianDashboardProps> = ({ currentUser }
           </div>
         </div>
       )}
-    </Layout>
+    </div>
   );
 };
 

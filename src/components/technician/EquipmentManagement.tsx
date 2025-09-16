@@ -1,7 +1,5 @@
-// src/components/technician/EquipmentManagement.tsx
 import React, { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
-import TechnicianHeader from "./TechnicianHeader";
 
 interface Equipment {
   id: string;
@@ -44,7 +42,6 @@ const EquipmentManagement: React.FC<EquipmentManagementProps> = ({ currentUser }
     loadTechnicians();
   }, []);
 
-  // Fetch equipment
   const loadEquipment = async () => {
     setLoading(true);
     const { data, error } = await supabase
@@ -52,29 +49,21 @@ const EquipmentManagement: React.FC<EquipmentManagementProps> = ({ currentUser }
       .select("*")
       .order("created_at", { ascending: false });
 
-    if (error) {
-      console.error("Load Equipment Error:", error);
-    } else {
-      setEquipmentList(data ?? []);
-    }
+    if (error) console.error("Load Equipment Error:", error);
+    else setEquipmentList(data ?? []);
     setLoading(false);
   };
 
-  // Fetch technicians
   const loadTechnicians = async () => {
     const { data, error } = await supabase
       .from("profiles")
       .select("id, full_name")
       .eq("role", "technician");
 
-    if (error) {
-      console.error("Load Technicians Error:", error);
-    } else {
-      setTechnicians(data ?? []);
-    }
+    if (error) console.error("Load Technicians Error:", error);
+    else setTechnicians(data ?? []);
   };
 
-  // Submit form (Add / Edit)
   const handleSubmit = async () => {
     if (!form.name) return alert("Equipment name is required");
     setSubmitting(true);
@@ -110,42 +99,24 @@ const EquipmentManagement: React.FC<EquipmentManagementProps> = ({ currentUser }
     }
   };
 
-  // Open modal for add/edit
   const openModal = (mode: "create" | "edit", eq?: Equipment) => {
     setFormMode(mode);
-    if (mode === "edit" && eq) {
-      setForm(eq);
-    } else {
-      setForm({});
-    }
+    if (mode === "edit" && eq) setForm(eq);
+    else setForm({});
     setModalOpen(true);
   };
 
-  // Delete equipment
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this equipment?")) return;
     const { error } = await supabase.from("equipment").delete().eq("id", id);
-    if (error) {
-      alert(`Failed to delete equipment: ${error.message}`);
-    } else {
-      setEquipmentList(equipmentList.filter((eq) => eq.id !== id));
-    }
+    if (error) alert(`Failed to delete equipment: ${error.message}`);
+    else setEquipmentList(equipmentList.filter((eq) => eq.id !== id));
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <TechnicianHeader
-        currentUser={currentUser}
-        title="Equipment Management"
-        subtitle="Manage all equipment and assignments"
-      />
-
-      {/* Page Container */}
       <div className="p-6 max-w-7xl mx-auto">
-        {/* White Container */}
         <div className="bg-white rounded-lg shadow-lg border p-6">
-          {/* Add Equipment Button */}
           <div className="flex justify-end mb-6">
             <button
               onClick={() => openModal("create")}
@@ -155,13 +126,11 @@ const EquipmentManagement: React.FC<EquipmentManagementProps> = ({ currentUser }
             </button>
           </div>
 
-          {/* Loading / Empty State */}
           {loading ? (
             <div className="p-6 text-center text-gray-500">Loading equipment...</div>
           ) : equipmentList.length === 0 ? (
             <div className="p-6 text-center text-gray-500">No equipment found.</div>
           ) : (
-            /* Equipment Grid */
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {equipmentList.map((eq) => (
                 <div
@@ -182,7 +151,6 @@ const EquipmentManagement: React.FC<EquipmentManagementProps> = ({ currentUser }
                     Assigned to:{" "}
                     {technicians.find((t) => t.id === eq.assigned_to)?.full_name || "Unassigned"}
                   </p>
-
                   <div className="flex gap-4 mt-3">
                     <button
                       onClick={() => openModal("edit", eq)}
@@ -203,7 +171,6 @@ const EquipmentManagement: React.FC<EquipmentManagementProps> = ({ currentUser }
           )}
         </div>
 
-        {/* Modal */}
         {modalOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg shadow-lg w-full max-w-lg p-6 relative max-h-[80vh] overflow-y-auto">

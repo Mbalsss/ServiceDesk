@@ -85,9 +85,18 @@ const AssignedTickets: React.FC<AssignedTicketsProps> = ({ currentUser, onViewTi
         .eq('id', ticketId);
 
       if (error) throw error;
-      fetchAssignedTickets();
+      
+      // Update local state to reflect the change
+      setTickets(prevTickets => 
+        prevTickets.map(ticket => 
+          ticket.id === ticketId 
+            ? { ...ticket, status, updated_at: new Date().toISOString() }
+            : ticket
+        )
+      );
     } catch (err) {
       console.error('Error updating ticket:', err);
+      setError("Failed to update ticket status. Please try again.");
     }
   };
 
@@ -195,7 +204,7 @@ const AssignedTickets: React.FC<AssignedTicketsProps> = ({ currentUser, onViewTi
               </div>
               <div className="mt-4 pt-4 border-t flex gap-2">
                 <button
-                  onClick={() => onViewTicket(ticket)}
+                  onClick={() => onViewTicket({...ticket})} // Create a copy to avoid direct mutation
                   className="flex-1 px-3 py-2 bg-gray-200 text-gray-800 text-sm font-semibold rounded-md hover:bg-gray-300 transition-colors min-w-[120px]"
                 >
                   View Details

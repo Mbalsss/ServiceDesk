@@ -10,7 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@azure/msal-browser": "^4.22.0",
+    "@azure/msal-browser": "^4.22.1",
     "@azure/msal-react": "^3.0.19",
     "@microsoft/microsoft-graph-client": "^3.0.7",
     "@supabase/supabase-js": "^2.54.0",

@@ -1,13 +1,16 @@
-import React, { useState, useEffect } from "react";
-import { X, FileText, AlertCircle } from "lucide-react";
+import React, { useState, useEffect, useCallback } from "react";
+import { X, FileText, AlertCircle, MessageSquare, Clock, User, Tag, AlertTriangle } from "lucide-react";
 import { Ticket } from "../types";
 import { supabase } from "../lib/supabase";
+import { useNavigate } from "react-router-dom";
 
 interface TicketDetailsProps {
-  ticket: Ticket;
+  ticket: Ticket | null;
   currentUserId: string;
+  currentUserName: string;
   onResolved?: () => void;
   onClose?: () => void;
+  onUpdate?: () => void;
 }
 
 interface CommentType {
@@ -35,365 +38,459 @@ const statusColors: Record<string, string> = {
 };
 
 const priorityColors: Record<string, string> = {
-  critical: "text-red-700 bg-red-100",
-  high: "text-orange-700 bg-orange-100",
-  medium: "text-yellow-700 bg-yellow-100",
-  low: "text-gray-700 bg-gray-100",
+  critical: "text-red-700 bg-red-100 border border-red-200",
+  high: "text-orange-700 bg-orange-100 border border-orange-200",
+  medium: "text-yellow-700 bg-yellow-100 border border-yellow-200",
+  low: "text-gray-700 bg-gray-100 border border-gray-200",
+};
+
+// Error logging utility
+const logSupabaseError = (operation: string, error: any) => {
+  console.error(`Supabase Error in ${operation}:`, {
+    message: error.message,
+    code: error.code,
+    details: error.details,
+    hint: error.hint,
+  });
 };
 
 const TicketDetails: React.FC<TicketDetailsProps> = ({ 
   ticket, 
   currentUserId, 
+  currentUserName,
   onResolved, 
-  onClose 
+  onClose,
+  onUpdate
 }) => {
+  const navigate = useNavigate();
+  
+  if (!ticket) {
+    console.warn("TicketDetails received a null ticket prop.");
+    return null;
+  }
+
   const [comments, setComments] = useState<CommentType[]>([]);
   const [fieldReports, setFieldReports] = useState<FieldReport[]>([]);
   const [newComment, setNewComment] = useState("");
   const [isOpen, setIsOpen] = useState(true);
-  const [status, setStatus] = useState(ticket.status);
-  const [showFieldReportForm, setShowFieldReportForm] = useState(false);
-  const [currentFieldReport, setCurrentFieldReport] = useState({
-    work_performed: "",
-    findings: "",
-    recommendations: "",
-    parts_used: ""
-  });
+  const [status, setStatus] = useState(ticket.status); 
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    fetchComments();
-    fetchFieldReports();
+  // Improved date formatting function
+  const formatDateTime = useCallback((dateString: string | undefined | null) => {
+    if (!dateString) {
+      return "N/A";
+    }
+    
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        return "Invalid Date";
+      }
+      
+      return date.toLocaleString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (e) {
+      console.error("Error formatting date:", dateString, e);
+      return "Error Date";
+    }
   }, []);
 
-  // Close everything function
-  const closeEverything = () => {
-    setIsOpen(false);
-    setShowFieldReportForm(false);
-    if (onClose) {
-      onClose();
-    }
-  };
-
-  // Close field report form only
-  const closeFieldReportForm = () => {
-    setShowFieldReportForm(false);
-  };
-
-  // Handle backdrop click
-  const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      closeEverything();
-    }
-  };
-
-  // Fetch comments
-  async function fetchComments() {
+  const fetchComments = useCallback(async () => {
     const { data, error } = await supabase
       .from("ticket_comments")
-      .select("*, technician_id:profiles!ticket_comments_technician_id_fkey(full_name)")
+      .select(`
+        id,
+        comment,
+        created_at,
+        profiles!ticket_comments_technician_id_fkey (
+          full_name
+        )
+      `)
       .eq("ticket_id", ticket.id)
       .order("created_at", { ascending: true });
 
     if (error) {
-      console.error(error);
+      logSupabaseError("fetchComments", error);
       return;
     }
 
     const fetched: CommentType[] = (data || []).map((c: any) => ({
       id: c.id,
-      technician_name: c.technician_id?.full_name || "Unknown",
+      technician_name: c.profiles?.full_name || "Unknown",
       comment: c.comment,
       created_at: c.created_at,
     }));
     setComments(fetched);
-  }
+  }, [ticket.id]);
 
-  // Fetch field reports
-  async function fetchFieldReports() {
-    const { data, error } = await supabase
-      .from("field_reports")
-      .select("*, technician_id:profiles!field_reports_technician_id_fkey(full_name)")
-      .eq("ticket_id", ticket.id)
-      .order("created_at", { ascending: false });
+  const fetchFieldReports = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("field_reports")
+        .select(`
+          id,
+          work_performed,
+          findings,
+          recommendations,
+          parts_used,
+          created_at,
+          profiles!field_reports_technician_id_fkey (
+            full_name
+          )
+        `)
+        .eq("ticket_id", ticket.id)
+        .order("created_at", { ascending: false });
 
-    if (error) {
-      console.error(error);
-      return;
+      if (error) {
+        logSupabaseError("fetchFieldReports", error);
+        
+        // If it's a schema error, try a simpler query
+        if (error.code === '42703' || error.message.includes('profiles')) {
+          console.log("Trying simpler field reports query...");
+          const { data: simpleData, error: simpleError } = await supabase
+            .from("field_reports")
+            .select("id, work_performed, findings, recommendations, parts_used, created_at, technician_id")
+            .eq("ticket_id", ticket.id)
+            .order("created_at", { ascending: false });
+            
+          if (simpleError) {
+            throw simpleError;
+          }
+          
+          // Manually fetch technician names
+          const reportsWithNames = await Promise.all(
+            (simpleData || []).map(async (report: any) => {
+              let technician_name = "Unknown";
+              if (report.technician_id) {
+                const { data: profileData } = await supabase
+                  .from("profiles")
+                  .select("full_name")
+                  .eq("id", report.technician_id)
+                  .single();
+                  
+                technician_name = profileData?.full_name || "Unknown";
+              }
+              
+              return {
+                id: report.id,
+                technician_name,
+                work_performed: report.work_performed,
+                findings: report.findings,
+                recommendations: report.recommendations,
+                parts_used: report.parts_used,
+                created_at: report.created_at,
+              };
+            })
+          );
+          
+          setFieldReports(reportsWithNames);
+          return;
+        }
+        
+        throw error;
+      }
+
+      const fetched: FieldReport[] = (data || []).map((r: any) => ({
+        id: r.id,
+        technician_name: r.profiles?.full_name || "Unknown",
+        work_performed: r.work_performed,
+        findings: r.findings,
+        recommendations: r.recommendations,
+        parts_used: r.parts_used,
+        created_at: r.created_at,
+      }));
+      setFieldReports(fetched);
+    } catch (error) {
+      logSupabaseError("fetchFieldReports", error);
+      // Set empty array to prevent UI errors
+      setFieldReports([]);
     }
+  }, [ticket.id]);
 
-    const fetched: FieldReport[] = (data || []).map((r: any) => ({
-      id: r.id,
-      technician_name: r.technician_id?.full_name || "Unknown",
-      work_performed: r.work_performed,
-      findings: r.findings,
-      recommendations: r.recommendations,
-      parts_used: r.parts_used,
-      created_at: r.created_at,
-    }));
-    setFieldReports(fetched);
-  }
+  useEffect(() => {
+    if (ticket) { 
+      fetchComments();
+      fetchFieldReports();
+    }
+  }, [fetchComments, fetchFieldReports, ticket]);
 
-  // Add comment
-  async function addComment() {
+  const closeEverything = useCallback(() => {
+    setIsOpen(false);
+    onClose?.();
+  }, [onClose]);
+
+  const handleBackdropClick = useCallback((e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) {
+      closeEverything();
+    }
+  }, [closeEverything]);
+
+  const addComment = async () => {
     if (!newComment.trim()) return;
+    
+    setIsSubmitting(true);
     const { error } = await supabase.from("ticket_comments").insert({
       ticket_id: ticket.id,
       technician_id: currentUserId,
       comment: newComment.trim(),
       created_at: new Date().toISOString(),
     });
+    
+    setIsSubmitting(false);
+    
     if (error) {
-      console.error(error);
+      logSupabaseError("addComment", error);
+      alert("Failed to add comment");
       return;
     }
+    
     setNewComment("");
     fetchComments();
-  }
+  };
 
-  // Submit field report
-  async function submitFieldReport() {
-    if (!currentFieldReport.work_performed.trim() || !currentFieldReport.findings.trim()) {
-      alert("Work performed and findings are required");
-      return;
-    }
-
-    const { error } = await supabase.from("field_reports").insert({
-      ticket_id: ticket.id,
-      technician_id: currentUserId,
-      work_performed: currentFieldReport.work_performed.trim(),
-      findings: currentFieldReport.findings.trim(),
-      recommendations: currentFieldReport.recommendations.trim(),
-      parts_used: currentFieldReport.parts_used.trim(),
-      created_at: new Date().toISOString(),
-    });
+  const updateStatus = async (newStatus: string) => {
+    console.log("Updating status to:", newStatus);
     
-    if (error) {
-      console.error(error);
-      alert("Error submitting field report");
-      return;
+    const updateData: any = { 
+      status: newStatus, 
+      updated_at: new Date().toISOString()
+    };
+    
+    // Only add assigned_to if we're moving to in_progress
+    if (newStatus === "in_progress") {
+      updateData.assigned_to = currentUserId;
     }
     
-    // Update ticket status to indicate it needs further attention
-    await updateStatus("open");
-    
-    setCurrentFieldReport({
-      work_performed: "",
-      findings: "",
-      recommendations: "",
-      parts_used: ""
-    });
-    setShowFieldReportForm(false);
-    fetchFieldReports();
-    alert("Field report submitted successfully");
-  }
-
-  // Update ticket status
-  async function updateStatus(newStatus: string) {
-    const { error } = await supabase
-      .from("tickets")
-      .update({ status: newStatus, updated_at: new Date().toISOString() })
-      .eq("id", ticket.id);
-    if (error) {
-      console.error(error);
-      return;
+    try {
+      const { error } = await supabase
+        .from("tickets")
+        .update(updateData)
+        .eq("id", ticket.id);
+        
+      if (error) {
+        console.error("Full update error:", error);
+        throw error;
+      }
+      
+      setStatus(newStatus);
+      onUpdate?.();
+      if (newStatus === "resolved") onResolved?.();
+      
+    } catch (error: any) {
+      console.error("Error updating status:", error);
+      
+      // More specific error messages
+      if (error.code === '42501') {
+        alert("Permission denied. You may not have rights to update this ticket.");
+      } else if (error.code === '23505') {
+        alert("Database constraint violation. This may be a duplicate operation.");
+      } else {
+        alert(`Failed to update status: ${error.message}`);
+      }
     }
-    setStatus(newStatus);
-    if (newStatus === "resolved" && onResolved) onResolved();
-  }
+  };
 
-  // Request Approval
-  async function requestApproval() {
+  const requestApproval = async () => {
     if (status === "closed") return;
+    
     const { error } = await supabase
       .from("tickets")
       .update({ approval_requested: true })
       .eq("id", ticket.id);
+      
     if (error) {
-      console.error(error);
+      logSupabaseError("requestApproval", error);
+      alert("Failed to request approval");
       return;
     }
+    
     alert("Approval requested");
-  }
+    onUpdate?.();
+  };
 
-  // Escalate Ticket
-  async function escalateTicket() {
+  const escalateTicket = async () => {
     if (status === "closed") return;
+    
     const { error } = await supabase
       .from("tickets")
-      .update({ escalated: true, updated_at: new Date().toISOString() })
+      .update({ 
+        escalated: true, 
+        updated_at: new Date().toISOString(),
+        escalated_at: new Date().toISOString(),
+        escalated_by: currentUserId
+      })
       .eq("id", ticket.id);
+      
     if (error) {
-      console.error(error);
+      logSupabaseError("escalateTicket", error);
+      alert("Failed to escalate ticket");
       return;
     }
+    
     alert("Ticket escalated");
-  }
+    onUpdate?.();
+  };
 
-  // Close ticket
-  async function closeTicket() {
-    const { error } = await supabase
-      .from("tickets")
-      .update({ status: "closed", updated_at: new Date().toISOString() })
-      .eq("id", ticket.id);
-    if (error) {
-      console.error(error);
-      return;
+  const closeTicket = async () => {
+    try {
+      const updateData: any = { 
+        status: "closed", 
+        updated_at: new Date().toISOString(),
+        closed_by: currentUserId
+      };
+      
+      const { error } = await supabase
+        .from("tickets")
+        .update(updateData)
+        .eq("id", ticket.id);
+        
+      if (error) {
+        console.error("Full close error:", error);
+        throw error;
+      }
+      
+      setStatus("closed");
+      onUpdate?.();
+      closeEverything();
+      
+    } catch (error: any) {
+      console.error("Error closing ticket:", error);
+      alert(`Failed to close ticket: ${error.message}`);
     }
-    setStatus("closed");
+  };
+
+  // Function to redirect to Field Report page
+  const redirectToFieldReport = () => {
+    if (!ticket) return;
+    
+    // Close the ticket details modal first
     closeEverything();
-  }
+    
+    // Navigate to field report page with ticket info
+    navigate('/field-report', { 
+      state: { 
+        ticketId: ticket.id,
+        ticketNumber: ticket.ticket_number,
+        customerName: ticket.requester_name,
+        siteLocation: ticket.location || '',
+        presetDescription: `Cannot resolve ticket #${ticket.ticket_number}: ${ticket.title}`
+      }
+    });
+  };
 
   if (!isOpen) return null;
 
   return (
     <div 
-      className="fixed inset-0 flex justify-center items-center z-40 bg-black bg-opacity-50"
+      className="fixed inset-0 flex justify-center items-center z-40 bg-black bg-opacity-50 p-4"
       onClick={handleBackdropClick}
     >
-      {/* Field Report Modal */}
-      {showFieldReportForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
-          <div 
-            className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold">Field Report</h3>
-              <button onClick={closeFieldReportForm} className="text-gray-500 hover:text-gray-800">
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Work Performed *</label>
-                <textarea
-                  className="w-full p-2 border border-gray-300 rounded-md"
-                  rows={3}
-                  value={currentFieldReport.work_performed}
-                  onChange={e => setCurrentFieldReport({...currentFieldReport, work_performed: e.target.value})}
-                  placeholder="Describe the work you performed on this ticket..."
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Findings *</label>
-                <textarea
-                  className="w-full p-2 border border-gray-300 rounded-md"
-                  rows={3}
-                  value={currentFieldReport.findings}
-                  onChange={e => setCurrentFieldReport({...currentFieldReport, findings: e.target.value})}
-                  placeholder="What did you discover during your investigation?"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Recommendations</label>
-                <textarea
-                  className="w-full p-2 border border-gray-300 rounded-md"
-                  rows={3}
-                  value={currentFieldReport.recommendations}
-                  onChange={e => setCurrentFieldReport({...currentFieldReport, recommendations: e.target.value})}
-                  placeholder="What do you recommend as next steps?"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Parts Used</label>
-                <input
-                  type="text"
-                  className="w-full p-2 border border-gray-300 rounded-md"
-                  value={currentFieldReport.parts_used}
-                  onChange={e => setCurrentFieldReport({...currentFieldReport, parts_used: e.target.value})}
-                  placeholder="List any parts used (comma separated)"
-                />
-              </div>
-              
-              <div className="flex justify-end space-x-2 pt-4">
-                <button 
-                  onClick={closeFieldReportForm}
-                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-100"
-                >
-                  Cancel
-                </button>
-                <button 
-                  onClick={submitFieldReport}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                >
-                  Submit Field Report
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      
       <div 
-        className="relative w-full max-w-2xl bg-white rounded-lg shadow-xl overflow-y-auto max-h-[90vh] p-6 z-50"
+        className="relative w-full max-w-4xl bg-white rounded-lg shadow-xl overflow-y-auto max-h-[90vh] z-50"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-between items-center border-b border-gray-200 pb-2 mb-4 sticky top-0 bg-white">
-          <h2 className="text-xl font-bold text-gray-900">{ticket.title}</h2>
-          <button onClick={closeEverything} className="text-gray-500 hover:text-gray-800">
+        <div className="flex justify-between items-center border-b border-gray-200 p-6 sticky top-0 bg-white z-10">
+          <h2 className="text-2xl font-bold text-gray-900">{ticket.title}</h2>
+          <button 
+            onClick={closeEverything} 
+            className="text-gray-500 hover:text-gray-800 transition-colors"
+          >
             <X className="w-6 h-6" />
           </button>
         </div>
 
-        {/* Ticket Details */}
-        <div className="space-y-6">
-          <div>
-            <h3 className="text-lg font-medium text-gray-800 mb-2">Ticket Details</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div><strong>Ticket ID:</strong> {ticket.id}</div>
-              <div><strong>Type:</strong> {ticket.type.replace("_", " ")}</div>
+        <div className="p-6 space-y-6">
+          {/* Ticket Details */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
               <div>
-                <strong>Priority:</strong>{" "}
-                <span className={`ml-2 px-2 py-1 rounded text-xs ${priorityColors[ticket.priority]}`}>
-                  {ticket.priority}
-                </span>
+                <h3 className="text-lg font-medium text-gray-800 mb-3 flex items-center">
+                  <User className="w-5 h-5 mr-2" /> Ticket Details
+                </h3>
+                <div className="space-y-3 text-sm">
+                  <div className="flex justify-between">
+                    <span className="font-medium">Ticket ID:</span>
+                    <span className="text-gray-600">{ticket.id}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-medium">Type:</span>
+                    <span className="text-gray-600 capitalize">{ticket.type.replace("_", " ")}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-medium">Requester:</span>
+                    <span className="text-gray-600">{ticket.requester_name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-medium">Category:</span>
+                    <span className="text-gray-600">{ticket.category}</span>
+                  </div>
+                </div>
               </div>
+              
               <div>
-                <strong>Status:</strong>{" "}
-                <span className={`ml-2 px-2 py-1 rounded text-xs ${statusColors[status]}`}>
-                  {status.replace("_", " ")}
-                </span>
+                <h3 className="text-lg font-medium text-gray-800 mb-3 flex items-center">
+                  <Tag className="w-5 h-5 mr-2" /> Status & Priority
+                </h3>
+                <div className="space-y-3 text-sm">
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">Priority:</span>
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${priorityColors[ticket.priority]}`}>
+                      {ticket.priority}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">Status:</span>
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusColors[status]}`}>
+                      {status.replace("_", " ")}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-medium">Estimated Time:</span>
+                    <span className="text-gray-600">{ticket.estimatedTime}</span>
+                  </div>
+                </div>
               </div>
-              <div><strong>Requester:</strong> {ticket.requester_name}</div>
-              <div><strong>Category:</strong> {ticket.category}</div>
-              <div><strong>Estimated Time:</strong> {ticket.estimatedTime}</div>
             </div>
-          </div>
 
-          {/* Description */}
-          <div>
-            <h3 className="text-lg font-medium text-gray-800 mb-2">Description</h3>
-            <p className="text-gray-600">{ticket.description}</p>
-          </div>
-
-          {/* Image */}
-          {ticket.image_url && (
+            {/* Description */}
             <div>
-              <h3 className="text-lg font-medium text-gray-800 mb-2">Attachment</h3>
-              <img
-                src={ticket.image_url}
-                alt="Ticket attachment"
-                className="max-w-full h-auto rounded border border-gray-200"
-              />
+              <h3 className="text-lg font-medium text-gray-800 mb-3">Description</h3>
+              <p className="text-gray-600 bg-gray-50 p-4 rounded-lg">{ticket.description}</p>
+              
+              {/* Image */}
+              {ticket.image_url && (
+                <div className="mt-4">
+                  <h3 className="text-lg font-medium text-gray-800 mb-2">Attachment</h3>
+                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    <img
+                      src={ticket.image_url}
+                      alt="Ticket attachment"
+                      className="w-full h-auto max-h-60 object-contain"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          </div>
 
           {/* Field Reports */}
           {fieldReports.length > 0 && (
             <div>
-              <h3 className="text-lg font-medium text-gray-800 mb-2 flex items-center">
+              <h3 className="text-lg font-medium text-gray-800 mb-3 flex items-center">
                 <FileText className="w-5 h-5 mr-2" /> Field Reports
               </h3>
-              <div className="space-y-4 mb-4">
+              <div className="space-y-4">
                 {fieldReports.map(report => (
                   <div key={report.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                     <div className="flex justify-between items-start mb-3">
                       <span className="font-medium text-gray-900">{report.technician_name}</span>
-                      <span className="text-xs text-gray-500">{new Date(report.created_at).toLocaleString()}</span>
+                      <span className="text-xs text-gray-500">{formatDateTime(report.created_at)}</span>
                     </div>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
@@ -429,84 +526,107 @@ const TicketDetails: React.FC<TicketDetailsProps> = ({
 
           {/* Comments */}
           <div>
-            <h3 className="text-lg font-medium text-gray-800 mb-2">Internal Comments</h3>
-            <div className="space-y-4 mb-4 max-h-60 overflow-y-auto">
+            <h3 className="text-lg font-medium text-gray-800 mb-3 flex items-center">
+              <MessageSquare className="w-5 h-5 mr-2" /> Internal Comments
+            </h3>
+            <div className="space-y-4 mb-4 max-h-60 overflow-y-auto p-1">
               {comments.length > 0 ? comments.map(c => (
-                <div key={c.id} className="border border-gray-200 rounded-lg p-3">
+                <div key={c.id} className="border border-gray-200 rounded-lg p-4">
                   <div className="flex justify-between items-start mb-2">
                     <span className="font-medium text-gray-900">{c.technician_name}</span>
-                    <span className="text-xs text-gray-500">{new Date(c.created_at).toLocaleString()}</span>
+                    <span className="text-xs text-gray-500">{formatDateTime(c.created_at)}</span>
                   </div>
                   <p className="text-gray-700">{c.comment}</p>
                 </div>
-              )) : <p className="text-gray-500">No comments yet.</p>}
+              )) : (
+                <div className="text-center py-4 text-gray-500">
+                  <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p>No comments yet.</p>
+                </div>
+              )}
             </div>
             <div className="border-t pt-4">
               <textarea
                 placeholder="Add an internal comment..."
-                className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 rows={3}
                 value={newComment}
                 onChange={e => setNewComment(e.target.value)}
               />
               <button
                 onClick={addComment}
-                className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                disabled={isSubmitting || !newComment.trim()}
+                className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center"
               >
-                Add Comment
+                {isSubmitting ? (
+                  <>
+                    <Clock className="w-4 h-4 mr-1 animate-spin" />
+                    Adding...
+                  </>
+                ) : (
+                  "Add Comment"
+                )}
               </button>
             </div>
           </div>
 
           {/* Actions */}
-          <div className="flex flex-wrap gap-2 pt-4 border-t">
-            {status === "open" && (
-              <button onClick={() => updateStatus("in_progress")} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                Take Ticket
-              </button>
-            )}
-
-            {status === "in_progress" && (
-              <>
-                <button onClick={() => updateStatus("resolved")} className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
-                  Mark Resolved
-                </button>
-                
+          <div className="border-t pt-6">
+            <h3 className="text-lg font-medium text-gray-800 mb-3">Actions</h3>
+            <div className="flex flex-wrap gap-3">
+              {status === "open" && (
                 <button 
-                  onClick={() => setShowFieldReportForm(true)} 
-                  className="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 flex items-center"
+                  onClick={() => updateStatus("in_progress")} 
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
                 >
-                  <AlertCircle className="w-4 h-4 mr-1" /> Cannot Resolve
+                  Take Ticket
                 </button>
-              </>
-            )}
+              )}
 
-            {status !== "closed" && (
-              <>
-                <button onClick={requestApproval} className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700">
-                  Request Approval
+              {status === "in_progress" && (
+                <>
+                  <button 
+                    onClick={() => updateStatus("resolved")} 
+                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                  >
+                    Mark Resolved
+                  </button>
+                  
+                  <button 
+                    onClick={redirectToFieldReport}
+                    className="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 transition-colors flex items-center"
+                  >
+                    <AlertCircle className="w-4 h-4 mr-1" /> Cannot Resolve
+                  </button>
+                </>
+              )}
+
+              {status !== "closed" && (
+                <>
+                  <button 
+                    onClick={requestApproval} 
+                    className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
+                  >
+                    Request Approval
+                  </button>
+                  <button 
+                    onClick={escalateTicket} 
+                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors flex items-center"
+                  >
+                    <AlertTriangle className="w-4 h-4 mr-1" /> Escalate
+                  </button>
+                </>
+              )}
+
+              {status === "resolved" && (
+                <button 
+                  onClick={closeTicket} 
+                  className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
+                >
+                  Close Ticket
                 </button>
-                <button onClick={escalateTicket} className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">
-                  Escalate
-                </button>
-              </>
-            )}
-
-            {status === "resolved" && (
-              <button onClick={closeTicket} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">
-                Close Ticket
-              </button>
-            )}
-          </div>
-
-          {/* Footer Close Button */}
-          <div className="border-t pt-4 flex justify-end">
-            <button 
-              onClick={closeEverything}
-              className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
-            >
-              Close
-            </button>
+              )}
+            </div>
           </div>
         </div>
       </div>

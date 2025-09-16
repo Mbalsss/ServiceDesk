@@ -1,5 +1,9 @@
+// src/App.tsx
 import React, { useState, useEffect } from 'react';
-import { supabase } from './lib/supabase';
+import { supabase } from './lib/supabase'; // Existing Supabase import
+import { NotificationProvider } from './components/contexts/NotificationContext'; // .tsx extension is optional in imports
+
+// Import your components
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import Login from './components/Login';
@@ -21,7 +25,7 @@ import Automation from './components/Automation';
 import Settings from './components/Settings';
 import { ticketService } from './services/ticketService';
 import { Ticket, DashboardStats, TechAvailability as TechAvailabilityType } from './types';
-import LandingPage from './components/LandingPage'; // <-- Make sure this import is correct
+import LandingPage from './components/LandingPage';
 
 // user components
 import UserDashboard from './components/user/UserDashboard';
@@ -36,11 +40,11 @@ import UnassignedTicketsQueue from './components/technician/UnassignedTicketsQue
 import PerformanceOverview from './components/technician/PerformanceOverview';
 import TicketPage from './components/technician/TicketPage';
 import FieldReport from './components/technician/FieldReport';
-import { TeamsChatWrapper } from './components/technician/TeamsChat';
-import KnowledgeBase from './components/technician/KnowlegdeBase';
 import EquipmentManagement from './components/technician/EquipmentManagement';
+import TicketsPage from './components/technician/TicketPage';
 
-// Updated User type to include department
+
+// Updated User type
 export interface User {
   id: string;
   name: string;
@@ -51,7 +55,6 @@ export interface User {
 
 function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  // Changed initial authView to 'landing'
   const [authView, setAuthView] = useState<'landing' | 'login' | 'signup'>('landing');
   const [activeView, setActiveView] = useState('dashboard');
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -66,21 +69,21 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
 
-  const [isChatOpen, setIsChatOpen] = useState(false);
-  const [isTeamsChatOpen, setIsTeamsChatOpen] = useState(false);
-  // Removed toggleTeamsChat as setIsTeamsChatOpen is passed directly
+  // Modal state for CreateTicket
+  const [isCreateTicketModalOpen, setIsCreateTicketModalOpen] = useState(false);
 
-  // --------------------------
+  // State for chat components
+  const [isSupportChatOpen, setIsSupportChatOpen] = useState(false);
+  const [isCopilotOpen, setIsCopilotOpen] = useState(false);
+
   // Fetch current user & profile
-  // --------------------------
   useEffect(() => {
     const fetchUser = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
-
         if (!user) {
           setCurrentUser(null);
-          setAuthView('landing'); // No user, show landing page
+          setAuthView('landing');
           setLoading(false);
           return;
         }
@@ -94,7 +97,7 @@ function App() {
         if (error) {
           console.error('Error fetching profile:', error);
           setCurrentUser(null);
-          setAuthView('landing'); // Profile error, show landing
+          setAuthView('landing');
         } else if (profile) {
           setCurrentUser({
             id: profile.id,
@@ -103,31 +106,26 @@ function App() {
             role: profile.role as 'admin' | 'technician' | 'user',
             department: profile.department || null,
           });
-          setAuthView('login'); // User found, assume logged in (will render main app)
+          setAuthView('login');
         }
       } catch (err) {
         console.error('Unexpected error fetching user:', err);
         setCurrentUser(null);
-        setAuthView('landing'); // General error, show landing
+        setAuthView('landing');
       } finally {
         setLoading(false);
       }
     };
 
     fetchUser();
-    // loadData() should only run if user is authenticated, handle this in render logic
   }, []);
 
-  // Effect to handle data loading *after* user is authenticated
   useEffect(() => {
     if (currentUser) {
       loadData();
     }
-  }, [currentUser]); // Run when currentUser changes (i.e., logs in)
+  }, [currentUser]);
 
-  // --------------------------
-  // Load tickets & stats
-  // --------------------------
   const loadData = async () => {
     setLoading(true);
     try {
@@ -144,21 +142,17 @@ function App() {
     }
   };
 
-  // --------------------------
   // Auth handlers
-  // --------------------------
   const handleLogin = (user: User) => {
     setCurrentUser(user);
-    // After successful login, transition to the authenticated app view
     setActiveView('dashboard');
-    setAuthView('login'); // Keep authView at 'login' or switch to a 'authenticated' state if preferred
+    setAuthView('login');
   };
 
   const handleSignup = (user: User) => {
     setCurrentUser(user);
-    // After successful signup, transition to the authenticated app view
     setActiveView('dashboard');
-    setAuthView('login'); // Keep authView at 'login' or switch to a 'authenticated' state if preferred
+    setAuthView('login');
   };
 
   const handleLogout = async () => {
@@ -167,15 +161,13 @@ function App() {
       if (error) throw error;
       setCurrentUser(null);
       setActiveView('dashboard');
-      setAuthView('landing'); // After logout, go back to landing page
+      setAuthView('landing');
     } catch (error) {
       console.error('Logout failed:', error);
     }
   };
 
-  // --------------------------
-  // Ticket creation handler
-  // --------------------------
+  // Ticket handlers
   const handleTicketCreate = async (data: {
     title: string;
     description: string;
@@ -187,58 +179,43 @@ function App() {
     status: 'open' | 'in_progress' | 'resolved' | 'closed';
   }) => {
     if (!currentUser) return;
-
     try {
       const newTicket = await ticketService.createTicket({
         ...data,
         requester: currentUser.id,
       });
-
       if (newTicket) {
         setTickets([newTicket, ...tickets]);
-        if (currentUser.role === 'user') {
-          setActiveView('my_tickets');
-        } else {
-          setActiveView('tickets');
-        }
+        setActiveView(currentUser.role === 'user' ? 'my_tickets' : 'tickets');
       }
     } catch (err) {
       console.error('Ticket creation failed:', err);
     }
   };
 
-  // --------------------------
   // Render content based on view & role
-  // --------------------------
   const renderContent = () => {
-    // This function will only be called if currentUser is NOT null,
-    // due to the conditional rendering higher up.
-    if (!currentUser) return null; // Defensive check, but should not be hit.
+    if (!currentUser) return null;
 
     switch (activeView) {
       case 'dashboard':
-        if (currentUser.role === 'admin')
-          return <Dashboard stats={stats} recentTickets={tickets} />;
-        if (currentUser.role === 'technician')
-          return <TechnicianDashboard currentUser={currentUser} onLogout={handleLogout} />;
+        if (currentUser.role === 'admin') return <Dashboard stats={stats} recentTickets={tickets} />;
+        if (currentUser.role === 'technician') return <TechnicianDashboard currentUser={currentUser} onLogout={handleLogout} />;
         return <UserDashboard currentUser={currentUser} onLogout={handleLogout} />;
-
       case 'tickets':
-        return (
-          <TicketList
-            tickets={tickets}
-            onTicketSelect={(id) => {
-              setSelectedTicketId(id);
-              setActiveView('ticket-details');
-            }}
-            onTicketCreate={handleTicketCreate}
-            currentUserName={currentUser.name}
-          />
-        );
-
+        return <TicketList tickets={tickets} onTicketSelect={(id) => { setSelectedTicketId(id); setActiveView('ticket-details'); }} currentUserName={currentUser.name} />;
+      case 'assigned_tickets':
+        return <AssignedTickets currentUser={currentUser} onViewTicket={(id) => { setSelectedTicketId(id); setActiveView('ticket-details'); }} />;
+      case 'unassigned_tickets':
+        return <UnassignedTicketsQueue currentUser={currentUser} onTicketTaken={loadData} onViewTicket={(id) => { setSelectedTicketId(id); setActiveView('ticket-details'); }} />;
+      case 'performance':
+        return <PerformanceOverview assignedTickets={[]} />;
+      case 'field_report':
+      return <FieldReport currentUser={currentUser} />;
+      case 'equipment':
+        return <EquipmentManagement />;
       case 'scheduler':
-        // FIX: Pass the currentUser prop here
-        return <Scheduler currentUser={currentUser} initialEvents={[]} />; // Pass currentUser
+        return <Scheduler currentUser={currentUser} initialEvents={[]} />;
       case 'tech-availability':
         return <TechAvailability technicians={technicians} onStatusUpdate={loadData} />;
       case 'tasks':
@@ -259,71 +236,44 @@ function App() {
         return <Automation />;
       case 'settings':
         return <Settings />;
-      case 'assigned_tickets':
-        return <AssignedTickets currentUser={currentUser} onViewTicket={() => {}} />;
-      case 'unassigned_tickets':
-        return <UnassignedTicketsQueue
-          currentUser={currentUser}
-          onTicketTaken={loadData}
-          onViewTicket={() => {}}
-        />;
-      case 'performance':
-        return <PerformanceOverview assignedTickets={[]} />;
-      case 'my_tickets': {
+      case 'my_tickets':
         const userTickets = tickets.filter(t => t.requester === currentUser.id);
         return (
-          <MyTickets
-            tickets={userTickets}
-            onSelectTicket={() => {}}
-            onOpenCreateTicket={() => setActiveView('create')}
+          <MyTickets 
+            tickets={userTickets} 
+            onSelectTicket={(id) => { 
+              setSelectedTicketId(id); 
+              setActiveView('ticket-details'); 
+            }} 
+            onOpenCreateTicket={() => setIsCreateTicketModalOpen(true)}
+            currentUser={currentUser} // Fixed: Added currentUser prop
           />
         );
-      }
       case 'profile_settings':
-        return <ProfileSettings
-          currentUser={currentUser}
-          onUpdate={(updatedUser) => console.log('Profile updated', updatedUser)}
-        />;
-      case 'create':
-        return (
-          <CreateTicket
-            currentUser={currentUser}
-            currentUserRole={currentUser.role}
-            onTicketCreate={handleTicketCreate}
-            onCancel={() => setActiveView('dashboard')}
-          />
-        );
-      case 'ticket-details': {
+        return <ProfileSettings currentUser={currentUser} onUpdate={(updatedUser) => console.log('Profile updated', updatedUser)} />;
+      case 'tickets_page':
+        return <TicketsPage currentUser={currentUser} />;
+      case 'ticket-details':
         const selectedTicket = tickets.find(t => t.id === selectedTicketId);
-        return selectedTicket ? (
-          <TicketDetails ticket={selectedTicket} onBack={() => setActiveView('tickets')} />
-        ) : <div className="p-6">Ticket not found</div>;
-      };
-      case 'ticketsPage':
-        return (
-          <TicketPage
-            currentUser={currentUser}
-            onViewTicket={(id) => {
-              setSelectedTicketId(id);
-              setActiveView('ticket-details');
-            }}
-          />
-        );
-      case 'knowledge_base':
-        return <KnowledgeBase />;
-      case 'field_report':
-        return <FieldReport currentUser={currentUser} />;
-      case 'equipment':
-        return <EquipmentManagement />;
-
+        if (currentUser.role === 'technician') {
+          return <TicketPage ticket={selectedTicket} onBack={() => setActiveView('assigned_tickets')} />;
+        } else {
+          return selectedTicket ? (
+            <TicketDetails 
+              ticket={selectedTicket} 
+              onBack={() => setActiveView(currentUser.role === 'user' ? 'my_tickets' : 'tickets')} 
+              currentUser={currentUser} // Added currentUser prop for consistency
+            />
+          ) : (
+            <div className="p-6">Ticket not found</div>
+          );
+        }
       default:
-        return <div>Page not found.</div>;
+        return <div className="p-6">Page not found.</div>;
     }
   };
 
-  // --------------------------
-  // Loading & auth screens (top-level rendering logic)
-  // --------------------------
+  // Loading & auth screens
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -335,68 +285,60 @@ function App() {
     );
   }
 
-  // If no current user, display the appropriate auth view
   if (!currentUser) {
-    if (authView === 'landing') {
-      return (
-        <LandingPage
-          onStartLogin={() => setAuthView('login')}
-          onStartSignup={() => setAuthView('signup')}
-        />
-      );
-    } else if (authView === 'login') {
-      return (
-        <Login
-          onLogin={handleLogin}
-          onSwitchToSignup={() => setAuthView('signup')}
-        />
-      );
-    } else if (authView === 'signup') {
-      return (
-        <Signup
-          onSignup={handleSignup}
-          onSwitchToLogin={() => setAuthView('login')}
-        />
-      );
-    }
-    // Fallback if authView is somehow invalid
+    if (authView === 'landing') return <LandingPage onStartLogin={() => setAuthView('login')} onStartSignup={() => setAuthView('signup')} />;
+    if (authView === 'login') return <Login onLogin={handleLogin} onSwitchToSignup={() => setAuthView('signup')} />;
+    if (authView === 'signup') return <Signup onSignup={handleSignup} onSwitchToLogin={() => setAuthView('login')} />;
     return <LandingPage onStartLogin={() => setAuthView('login')} onStartSignup={() => setAuthView('signup')} />;
   }
 
-  // --------------------------
-  // Authenticated User (main application layout)
-  // --------------------------
+  // Authenticated layout
   return (
-    <div className="min-h-screen flex">
-      <Sidebar
-        currentUser={currentUser}
-        activeView={activeView}
-        onViewChange={setActiveView}
-        logout={handleLogout}
-        onOpenCreateTicket={handleTicketCreate} // Passed the actual handler for creation
-        setChatOpen={setIsChatOpen} // For ServiceDeskChatbot
-        setTeamsChatOpen={setIsTeamsChatOpen} // For TeamsChatWrapper
-      />
-      <div className="flex-1 flex flex-col relative">
-        {currentUser.role === 'admin' && ( // Only show Header for admin? Consider for all roles.
-          <Header currentUser={currentUser.name} onLogout={handleLogout} />
-        )}
-        <main className="flex-1 overflow-auto bg-gray-50"> {/* Added bg-gray-50 for consistent background */}
-          {renderContent()}
-        </main>
-        {isChatOpen && (
-          <div className="fixed bottom-6 right-6 z-50">
-            <ServiceDeskChatbot onClose={() => setIsChatOpen(false)} />
-          </div>
-        )}
-      </div>
-      {isTeamsChatOpen && (
-        <TeamsChatWrapper
-          teamId="<YOUR_TEAM_ID>"
-          channelId="<YOUR_CHANNEL_ID>"
+    // Wrap the entire authenticated part with NotificationProvider
+    <NotificationProvider> {/* <-- NEW: NotificationProvider */}
+      <div className="min-h-screen flex">
+        <Sidebar
+          currentUser={currentUser}
+          activeView={activeView}
+          onViewChange={setActiveView}
+          logout={handleLogout}
+          onOpenCreateTicket={() => setIsCreateTicketModalOpen(true)}
+          setChatOpen={setIsSupportChatOpen}
+          setCopilotOpen={setIsCopilotOpen}
         />
-      )}
-    </div>
+        <div className="flex-1 flex flex-col relative">
+          {/* Header now receives currentUser.name, and we don't pass onLogout directly to Header */}
+          <Header currentUser={currentUser.name} /> {/* MODIFIED: No onLogout prop here */}
+          <main className="flex-1 overflow-auto bg-gray-50">{renderContent()}</main>
+
+          {/* Create Ticket Modal */}
+          {isCreateTicketModalOpen && (
+            <CreateTicket
+              currentUser={currentUser}
+              currentUserRole={currentUser.role}
+              onTicketCreate={(ticket) => {
+                handleTicketCreate(ticket);
+                setIsCreateTicketModalOpen(false);
+              }}
+              onCancel={() => setIsCreateTicketModalOpen(false)}
+            />
+          )}
+
+          {/* Chat components */}
+          {isSupportChatOpen && (
+            <div className="fixed bottom-6 right-6 z-50">
+              <ServiceDeskChatbot onClose={() => setIsSupportChatOpen(false)} />
+            </div>
+          )}
+
+          {isCopilotOpen && (
+            <div className="fixed bottom-6 right-80 z-50">
+              <CopilotAssistant onClose={() => setIsCopilotOpen(false)} />
+            </div>
+          )}
+        </div>
+      </div>
+    </NotificationProvider> // <-- NEW: NotificationProvider closes
   );
 }
 
