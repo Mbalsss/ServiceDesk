@@ -1,77 +1,69 @@
+// src/components/technician/UnassignedTicketsQueue.tsx
 import React, { useState, useEffect } from 'react';
-import { Ticket, Plus, RefreshCw, Clock, Info } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { X } from 'lucide-react';
 
-interface UnassignedTicketsQueueProps {
-  currentUser: { id: string; name: string };
-  onTicketTaken: () => void;
-  onViewTicket: (ticket: any) => void;
-}
-
-interface TicketType {
+interface Ticket {
   id: string;
   title: string;
   description: string;
   type: string;
   priority: string;
-  category: string;
   status: string;
-  requester_id: string;
-  assignee_id: string | null;
-  requester_name?: string;
-  created_at: string;
+  requester_name: string;
   estimatedTime?: string;
-  sla_deadline?: string;
-  image_url?: string;
+  created_at: string;
+  category: string;
 }
 
-const UnassignedTicketsQueue: React.FC<UnassignedTicketsQueueProps> = ({
-  currentUser,
-  onTicketTaken,
-  onViewTicket,
+interface UnassignedTicketsQueueProps {
+  currentUser: any;
+  onTicketTaken: () => void;
+  onViewTicket: (ticket: Ticket) => void;
+}
+
+const UnassignedTicketsQueue: React.FC<UnassignedTicketsQueueProps> = ({ 
+  currentUser, 
+  onTicketTaken, 
+  onViewTicket 
 }) => {
-  const [unassignedTickets, setUnassignedTickets] = useState<TicketType[]>([]);
+  const [unassignedTickets, setUnassignedTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [showModal, setShowModal] = useState(false);
 
   const fetchUnassignedTickets = async () => {
     try {
       setLoading(true);
-      setError(null);
-      const { data: ticketsData, error: ticketsError } = await supabase
+      const { data, error } = await supabase
         .from('tickets')
-        .select('*')
+        .select(`
+          *,
+          requester:profiles!tickets_requester_id_fkey(full_name)
+        `)
         .is('assignee_id', null)
         .order('created_at', { ascending: false });
 
-      if (ticketsError) throw ticketsError;
-      if (!ticketsData || ticketsData.length === 0) {
-        setUnassignedTickets([]);
-        setLoading(false);
-        return;
+      if (error) {
+        throw error;
       }
 
-      const requesterIds = [...new Set(ticketsData.map(t => t.requester_id).filter(Boolean))];
-      let usersMap = new Map();
-      if (requesterIds.length > 0) {
-        const { data: usersData } = await supabase
-          .from('profiles')
-          .select('id, full_name')
-          .in('id', requesterIds);
-
-        usersData?.forEach(user => usersMap.set(user.id, user.full_name));
-      }
-
-      const transformedTickets: TicketType[] = ticketsData.map(ticket => ({
-        ...ticket,
-        requester_name: usersMap.get(ticket.requester_id) || 'Unknown',
-        estimatedTime: ticket.estimatedTime || '2 hours',
+      const tickets = data.map((ticket: any) => ({
+        id: ticket.id,
+        title: ticket.title,
+        description: ticket.description,
+        type: ticket.type,
+        priority: ticket.priority,
+        status: ticket.status,
+        category: ticket.category || 'General',
+        requester_name: ticket.requester?.full_name || 'Unknown',
+        estimatedTime: ticket.estimated_time || 'Not specified',
+        created_at: ticket.created_at
       }));
 
-      setUnassignedTickets(transformedTickets);
-    } catch (err) {
-      console.error(err);
-      setError('Failed to load unassigned tickets. Please try again.');
+      setUnassignedTickets(tickets);
+    } catch (error) {
+      console.error('Error fetching unassigned tickets:', error);
     } finally {
       setLoading(false);
     }
@@ -81,172 +73,237 @@ const UnassignedTicketsQueue: React.FC<UnassignedTicketsQueueProps> = ({
     fetchUnassignedTickets();
   }, []);
 
+  const statusColor = (status: string) => ({
+    open: 'text-blue-700 bg-blue-100 border-blue-200',
+    in_progress: 'text-orange-700 bg-orange-100 border-orange-200',
+    resolved: 'text-green-700 bg-green-100 border-green-200',
+    closed: 'text-gray-700 bg-gray-100 border-gray-200',
+  }[status] || 'text-gray-700 bg-gray-100 border-gray-200');
+
+  const priorityColor = (priority: string) => ({
+    critical: 'text-red-700 bg-red-100',
+    high: 'text-orange-700 bg-orange-100',
+    medium: 'text-yellow-700 bg-yellow-100',
+    low: 'text-gray-700 bg-gray-100',
+  }[priority] || 'text-gray-700 bg-gray-100');
+
   const handleTakeTicket = async (ticketId: string) => {
-    console.log('Take ticket clicked for:', ticketId);
-    console.log('Current user:', currentUser);
-    
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('tickets')
         .update({ 
-          status: 'in_progress', 
-          assignee_id: currentUser.id, 
-          updated_at: new Date().toISOString() 
+          assignee_id: currentUser.id,
+          status: 'in_progress',
+          updated_at: new Date().toISOString()
         })
-        .eq('id', ticketId)
-        .select();
+        .eq('id', ticketId);
 
       if (error) {
-        console.error('Database error:', error);
         throw error;
       }
 
-      console.log('Ticket updated successfully:', data);
+      setUnassignedTickets(prev => prev.filter(ticket => ticket.id !== ticketId));
+      onTicketTaken();
       
-      // Remove the ticket from the list
-      setUnassignedTickets(prevTickets => {
-        const filtered = prevTickets.filter(t => t.id !== ticketId);
-        console.log('Remaining tickets:', filtered);
-        return filtered;
-      });
-      
-      // Call the callback function
-      if (onTicketTaken && typeof onTicketTaken === 'function') {
-        onTicketTaken();
-      } else {
-        console.warn('onTicketTaken callback is not available');
-      }
-      
-    } catch (err) {
-      console.error('Error in handleTakeTicket:', err);
-      setError('Failed to take ticket. Please try again.');
+    } catch (error) {
+      console.error('Error taking ticket:', error);
     }
   };
 
-  const getPriorityColor = (priority: string) => ({
-    critical: 'bg-red-200 text-red-800',
-    high: 'bg-orange-200 text-orange-800',
-    medium: 'bg-yellow-200 text-yellow-800',
-    low: 'bg-green-200 text-green-800',
-  }[priority] || 'bg-gray-200 text-gray-800');
+  const handleViewDetails = (ticket: Ticket) => {
+    setSelectedTicket(ticket);
+    setShowModal(true);
+  };
 
-  const getCategoryColor = (category: string) => {
-    const colors: Record<string, string> = {
-      Network: 'bg-blue-200 text-blue-800',
-      Software: 'bg-purple-200 text-purple-800',
-      Hardware: 'bg-indigo-200 text-indigo-800',
-      Other: 'bg-gray-200 text-gray-800',
-    };
-    return colors[category] || 'bg-gray-200 text-gray-800';
+  const closeModal = () => {
+    setShowModal(false);
+    setSelectedTicket(null);
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw className="w-8 h-8 animate-spin text-blue-600" />
+      <div className="p-6">
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Unassigned Tickets Queue</h2>
+          <p className="text-gray-600">Loading tickets...</p>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+          {[1, 2, 3].map((n) => (
+            <div key={n} className="bg-gray-50 border border-gray-200 rounded-lg p-5 animate-pulse">
+              <div className="h-6 bg-gray-200 rounded mb-4"></div>
+              <div className="h-4 bg-gray-200 rounded mb-2"></div>
+              <div className="h-4 bg-gray-200 rounded mb-4"></div>
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="h-4 bg-gray-200 rounded"></div>
+                <div className="h-4 bg-gray-200 rounded"></div>
+                <div className="h-4 bg-gray-200 rounded"></div>
+                <div className="h-4 bg-gray-200 rounded"></div>
+              </div>
+              <div className="h-8 bg-gray-200 rounded"></div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between mb-2">
-        <h2 className="text-2xl font-bold text-gray-800">Unassigned Tickets</h2>
-        <button
-          onClick={fetchUnassignedTickets}
-          className="flex items-center gap-1 px-3 py-1 bg-gray-100 rounded hover:bg-gray-200 text-gray-700"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Refresh
-        </button>
+    <div className="p-6">
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">Unassigned Tickets Queue</h2>
+        <p className="text-gray-600">
+          {unassignedTickets.length} unassigned tickets available
+        </p>
       </div>
-
-      {error && (
-        <div className="p-3 bg-red-50 text-red-700 rounded flex justify-between items-center">
-          {error}
-          <button onClick={fetchUnassignedTickets} className="underline">
-            Try Again
-          </button>
-        </div>
-      )}
-
+      
       {unassignedTickets.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">
-          <Ticket className="w-12 h-12 mx-auto mb-3" />
-          <p>No unassigned tickets available</p>
-          <p className="text-sm mt-1">All tickets have been assigned</p>
+        <div className="text-center py-16 bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl border-2 border-dashed border-gray-300">
+          <div className="w-20 h-20 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <p className="text-gray-500 text-lg font-medium mb-2">No unassigned tickets</p>
+          <p className="text-gray-400 text-sm">All tickets have been assigned to technicians</p>
         </div>
       ) : (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {unassignedTickets.map(ticket => (
-            <div
-              key={ticket.id}
-              className="bg-gradient-to-br from-white to-gray-50 border border-gray-200 rounded-xl shadow-lg p-5 flex flex-col justify-between hover:scale-105 transform transition"
-            >
-              {ticket.image_url && (
-                <img
-                  src={ticket.image_url}
-                  alt={ticket.title}
-                  className="w-full h-36 object-cover rounded-lg mb-3"
-                />
-              )}
-              <div className="mb-3">
-                <div className="flex justify-between items-center mb-2">
-                  <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                    {ticket.title}
-                    <div className="relative group">
-                      <Info className="w-4 h-4 text-gray-400 cursor-pointer" />
-                      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-64 bg-gray-900 text-white text-xs rounded p-2 opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lg">
-                        {ticket.description}
-                      </div>
-                    </div>
-                  </h3>
-                  <span className={`px-3 py-1 text-xs font-semibold rounded-full ${getPriorityColor(ticket.priority)}`}>
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+          {unassignedTickets.map((ticket) => (
+            <div key={ticket.id} className="bg-gray-50 border border-gray-200 rounded-lg p-5 flex flex-col justify-between transition-all hover:shadow-md">
+              <div>
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="font-semibold text-gray-900 pr-2 line-clamp-1">{ticket.title}</h3>
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-semibold capitalize ${priorityColor(ticket.priority)}`}>
                     {ticket.priority}
                   </span>
                 </div>
-                <div className="flex flex-wrap gap-2 text-sm text-gray-600 mb-1">
-                  <span className={`px-2 py-1 rounded-full ${getCategoryColor(ticket.category)}`}>
-                    {ticket.category}
-                  </span>
-                  <span>Requester: {ticket.requester_name}</span>
+                <p className="text-sm text-gray-600 mb-4 line-clamp-2">{ticket.description}</p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm text-gray-500 border-t pt-4">
+                  <span><strong>ID:</strong> {ticket.id.slice(0, 8)}...</span>
+                  <span className="capitalize"><strong>Type:</strong> {ticket.type.replace('_', ' ')}</span>
+                  <span><strong>Requester:</strong> {ticket.requester_name}</span>
+                  <span><strong>Est. Time:</strong> {ticket.estimatedTime}</span>
+                  <div className="col-span-2 flex items-center">
+                    <strong>Status:</strong>
+                    <span className={`ml-2 px-2 py-0.5 rounded text-xs capitalize border ${statusColor(ticket.status)}`}>
+                      {ticket.status.replace('_', ' ')}
+                    </span>
+                  </div>
                 </div>
-                {ticket.sla_deadline && (
-                  <p className="text-sm text-gray-500 flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
-                    SLA: {new Date(ticket.sla_deadline).toLocaleString()}
-                  </p>
-                )}
-                {ticket.estimatedTime && (
-                  <p className="text-sm text-gray-500 flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
-                    Estimated: {ticket.estimatedTime}
-                  </p>
-                )}
               </div>
-              <div className="flex justify-end gap-2 mt-3">
+              <div className="mt-4 pt-4 border-t flex gap-2">
                 <button
-                  onClick={() => {
-                    console.log('View ticket:', ticket.id);
-                    onViewTicket(ticket);
-                  }}
-                  className="px-3 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-lg font-medium"
+                  onClick={() => handleViewDetails(ticket)}
+                  className="flex-1 px-3 py-2 bg-gray-200 text-gray-800 text-sm font-semibold rounded-md hover:bg-gray-300 transition-colors min-w-[120px]"
                 >
-                  View
+                  View Details
                 </button>
                 <button
-                  onClick={() => {
-                    console.log('Take button clicked for:', ticket.id);
-                    handleTakeTicket(ticket.id);
-                  }}
-                  className="flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 hover:bg-green-200 rounded-lg font-medium"
+                  onClick={() => handleTakeTicket(ticket.id)}
+                  className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md hover:bg-blue-700 transition-colors min-w-[120px]"
                 >
-                  <Plus className="w-4 h-4" />
-                  Take
+                  Take Ticket
                 </button>
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Simple Ticket Details Modal */}
+      {showModal && selectedTicket && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 sticky top-0 bg-white">
+              <h2 className="text-xl font-bold text-gray-800">{selectedTicket.title}</h2>
+              <button
+                onClick={closeModal}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 space-y-6">
+              {/* Ticket Details */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-3">Ticket Details</h3>
+                  <div className="space-y-3">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Status:</span>
+                      <span className={`px-2.5 py-1 rounded text-xs capitalize border ${statusColor(selectedTicket.status)}`}>
+                        {selectedTicket.status.replace('_', ' ')}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Priority:</span>
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-semibold capitalize ${priorityColor(selectedTicket.priority)}`}>
+                        {selectedTicket.priority}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Type:</span>
+                      <span className="font-medium capitalize">{selectedTicket.type.replace('_', ' ')}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Category:</span>
+                      <span className="font-medium capitalize">{selectedTicket.category}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Estimated Time:</span>
+                      <span className="font-medium">{selectedTicket.estimatedTime}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-3">Requester Information</h3>
+                  <div className="space-y-3">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Requester:</span>
+                      <span className="font-medium">{selectedTicket.requester_name}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Created:</span>
+                      <span className="font-medium">
+                        {new Date(selectedTicket.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">Description</h3>
+                <p className="text-gray-700 bg-gray-50 p-4 rounded-lg">
+                  {selectedTicket.description}
+                </p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+                <button
+                  onClick={closeModal}
+                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    handleTakeTicket(selectedTicket.id);
+                    closeModal();
+                  }}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                >
+                  Take Ticket
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
