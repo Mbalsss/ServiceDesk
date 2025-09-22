@@ -1,7 +1,8 @@
 // src/App.tsx
 import React, { useState, useEffect } from 'react';
-import { supabase } from './lib/supabase'; // Existing Supabase import
-import { NotificationProvider } from './components/contexts/NotificationContext'; // .tsx extension is optional in imports
+import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { supabase } from './lib/supabase';
+import { NotificationProvider } from './components/contexts/NotificationContext';
 
 // Import your components
 import Sidebar from './components/Sidebar';
@@ -26,6 +27,7 @@ import Settings from './components/Settings';
 import { ticketService } from './services/ticketService';
 import { Ticket, DashboardStats, TechAvailability as TechAvailabilityType } from './types';
 import LandingPage from './components/LandingPage';
+import Portal from './components/Portal';
 
 // user components
 import UserDashboard from './components/user/UserDashboard';
@@ -38,11 +40,9 @@ import TechnicianDashboard from './components/technician/TechnicianDashboard';
 import AssignedTickets from './components/technician/AssignedTickets';
 import UnassignedTicketsQueue from './components/technician/UnassignedTicketsQueue';
 import PerformanceOverview from './components/technician/PerformanceOverview';
-import TicketPage from './components/technician/TicketPage';
+import TicketPage from './components/technician/TicketPage'; // ✅ only import once
 import FieldReport from './components/technician/FieldReport';
 import EquipmentManagement from './components/technician/EquipmentManagement';
-import TicketsPage from './components/technician/TicketPage';
-
 
 // Updated User type
 export interface User {
@@ -56,7 +56,6 @@ export interface User {
 function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authView, setAuthView] = useState<'landing' | 'login' | 'signup'>('landing');
-  const [activeView, setActiveView] = useState('dashboard');
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [stats, setStats] = useState<DashboardStats>({
     totalTickets: 0,
@@ -69,12 +68,12 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
 
-  // Modal state for CreateTicket
   const [isCreateTicketModalOpen, setIsCreateTicketModalOpen] = useState(false);
-
-  // State for chat components
   const [isSupportChatOpen, setIsSupportChatOpen] = useState(false);
   const [isCopilotOpen, setIsCopilotOpen] = useState(false);
+
+  const navigate = useNavigate();
+  const location = useLocation();
 
   // Fetch current user & profile
   useEffect(() => {
@@ -145,13 +144,13 @@ function App() {
   // Auth handlers
   const handleLogin = (user: User) => {
     setCurrentUser(user);
-    setActiveView('dashboard');
+    navigate('/dashboard');
     setAuthView('login');
   };
 
   const handleSignup = (user: User) => {
     setCurrentUser(user);
-    setActiveView('dashboard');
+    navigate('/dashboard');
     setAuthView('login');
   };
 
@@ -160,14 +159,14 @@ function App() {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       setCurrentUser(null);
-      setActiveView('dashboard');
+      navigate('/');
       setAuthView('landing');
     } catch (error) {
       console.error('Logout failed:', error);
     }
   };
 
-  // Ticket handlers
+  // Ticket creation handler
   const handleTicketCreate = async (data: {
     title: string;
     description: string;
@@ -186,90 +185,10 @@ function App() {
       });
       if (newTicket) {
         setTickets([newTicket, ...tickets]);
-        setActiveView(currentUser.role === 'user' ? 'my_tickets' : 'tickets');
+        navigate(currentUser.role === 'user' ? '/my-tickets' : '/tickets');
       }
     } catch (err) {
       console.error('Ticket creation failed:', err);
-    }
-  };
-
-  // Render content based on view & role
-  const renderContent = () => {
-    if (!currentUser) return null;
-
-    switch (activeView) {
-      case 'dashboard':
-        if (currentUser.role === 'admin') return <Dashboard stats={stats} recentTickets={tickets} />;
-        if (currentUser.role === 'technician') return <TechnicianDashboard currentUser={currentUser} onLogout={handleLogout} />;
-        return <UserDashboard currentUser={currentUser} onLogout={handleLogout} />;
-      case 'tickets':
-        return <TicketList tickets={tickets} onTicketSelect={(id) => { setSelectedTicketId(id); setActiveView('ticket-details'); }} currentUserName={currentUser.name} />;
-      case 'assigned_tickets':
-        return <AssignedTickets currentUser={currentUser} onViewTicket={(id) => { setSelectedTicketId(id); setActiveView('ticket-details'); }} />;
-      case 'unassigned_tickets':
-        return <UnassignedTicketsQueue currentUser={currentUser} onTicketTaken={loadData} onViewTicket={(id) => { setSelectedTicketId(id); setActiveView('ticket-details'); }} />;
-      case 'performance':
-        return <PerformanceOverview assignedTickets={[]} />;
-      case 'field_report':
-      return <FieldReport currentUser={currentUser} />;
-      case 'equipment':
-        return <EquipmentManagement />;
-      case 'scheduler':
-        return <Scheduler currentUser={currentUser} initialEvents={[]} />;
-      case 'tech-availability':
-        return <TechAvailability technicians={technicians} onStatusUpdate={loadData} />;
-      case 'tasks':
-        return <Tasks tasks={[]} />;
-      case 'reminders':
-        return <Reminders reminders={[]} />;
-      case 'announcements':
-        return <Announcements announcements={[]} />;
-      case 'reports':
-        return <Reports />;
-      case 'teams':
-        return <TeamsIntegration />;
-      case 'copilot':
-        return <CopilotAssistant />;
-      case 'agents':
-        return <Agents technicians={technicians} onTechniciansChange={setTechnicians} />;
-      case 'automation':
-        return <Automation />;
-      case 'settings':
-        return <Settings />;
-      case 'my_tickets':
-        const userTickets = tickets.filter(t => t.requester === currentUser.id);
-        return (
-          <MyTickets 
-            tickets={userTickets} 
-            onSelectTicket={(id) => { 
-              setSelectedTicketId(id); 
-              setActiveView('ticket-details'); 
-            }} 
-            onOpenCreateTicket={() => setIsCreateTicketModalOpen(true)}
-            currentUser={currentUser} // Fixed: Added currentUser prop
-          />
-        );
-      case 'profile_settings':
-        return <ProfileSettings currentUser={currentUser} onUpdate={(updatedUser) => console.log('Profile updated', updatedUser)} />;
-      case 'tickets_page':
-        return <TicketsPage currentUser={currentUser} />;
-      case 'ticket-details':
-        const selectedTicket = tickets.find(t => t.id === selectedTicketId);
-        if (currentUser.role === 'technician') {
-          return <TicketPage ticket={selectedTicket} onBack={() => setActiveView('assigned_tickets')} />;
-        } else {
-          return selectedTicket ? (
-            <TicketDetails 
-              ticket={selectedTicket} 
-              onBack={() => setActiveView(currentUser.role === 'user' ? 'my_tickets' : 'tickets')} 
-              currentUser={currentUser} // Added currentUser prop for consistency
-            />
-          ) : (
-            <div className="p-6">Ticket not found</div>
-          );
-        }
-      default:
-        return <div className="p-6">Page not found.</div>;
     }
   };
 
@@ -294,24 +213,112 @@ function App() {
 
   // Authenticated layout
   return (
-    // Wrap the entire authenticated part with NotificationProvider
-    <NotificationProvider> {/* <-- NEW: NotificationProvider */}
+    <NotificationProvider>
       <div className="min-h-screen flex">
         <Sidebar
           currentUser={currentUser}
-          activeView={activeView}
-          onViewChange={setActiveView}
+          activeView={location.pathname}
+          onViewChange={(view) => navigate(view)}
           logout={handleLogout}
           onOpenCreateTicket={() => setIsCreateTicketModalOpen(true)}
           setChatOpen={setIsSupportChatOpen}
           setCopilotOpen={setIsCopilotOpen}
         />
-        <div className="flex-1 flex flex-col relative">
-          {/* Header now receives currentUser.name, and we don't pass onLogout directly to Header */}
-          <Header currentUser={currentUser.name} /> {/* MODIFIED: No onLogout prop here */}
-          <main className="flex-1 overflow-auto bg-gray-50">{renderContent()}</main>
+        
+        {/* Main content with margin for fixed sidebar */}
+        <div className="flex-1 flex flex-col relative ml-64">
+          <Header currentUser={currentUser.name} />
+          <main className="flex-1 overflow-auto bg-gray-50">
+            <Routes>
+              {/* Dashboard Routes */}
+              <Route path="/dashboard" element={
+                currentUser.role === 'admin' ? 
+                  <Dashboard stats={stats} recentTickets={tickets} /> :
+                currentUser.role === 'technician' ? 
+                  <TechnicianDashboard currentUser={currentUser} onLogout={handleLogout} /> :
+                  <UserDashboard currentUser={currentUser} onLogout={handleLogout} />
+              } />
+              
+              {/* Ticket Routes */}
+              <Route path="/tickets" element={
+                <TicketList 
+                  tickets={tickets} 
+                  onTicketSelect={(id) => navigate(`/ticket/${id}`)} 
+                  currentUserName={currentUser.name} 
+                />
+              } />
 
-          {/* Create Ticket Modal */}
+              {/* ✅ Technician Ticket List Page */}
+              <Route path="/ticketpage" element={
+                <TicketPage 
+                  tickets={tickets} 
+                  currentUser={currentUser} 
+                />
+              } />
+              
+              <Route path="/ticket/:id" element={
+                currentUser.role === 'technician' ? 
+                  <TicketPage 
+                    ticket={tickets.find(t => t.id === location.pathname.split('/').pop())} 
+                    onBack={() => navigate('/assigned-tickets')} 
+                  /> :
+                  <TicketDetails 
+                    ticket={tickets.find(t => t.id === location.pathname.split('/').pop())} 
+                    onBack={() => navigate(currentUser.role === 'user' ? '/my-tickets' : '/tickets')} 
+                    currentUser={currentUser}
+                  />
+              } />
+              
+              {/* Technician Routes */}
+              <Route path="/assigned-tickets" element={
+                <AssignedTickets 
+                  currentUser={currentUser} 
+                  onViewTicket={(id) => navigate(`/ticket/${id}`)} 
+                />
+              } />
+              
+              <Route path="/unassigned-tickets" element={
+                <UnassignedTicketsQueue 
+                  currentUser={currentUser} 
+                  onTicketTaken={loadData} 
+                  onViewTicket={(id) => navigate(`/ticket/${id}`)} 
+                />
+              } />
+              
+              {/* User Routes */}
+              <Route path="/my-tickets" element={
+                <MyTickets 
+                  tickets={tickets.filter(t => t.requester === currentUser.id)} 
+                  onSelectTicket={(id) => navigate(`/ticket/${id}`)} 
+                  onOpenCreateTicket={() => setIsCreateTicketModalOpen(true)}
+                  currentUser={currentUser}
+                />
+              } />
+              
+              {/* Other Routes */}
+              <Route path="/scheduler" element={<Scheduler currentUser={currentUser} initialEvents={[]} />} />
+              <Route path="/tech-availability" element={<TechAvailability technicians={technicians} onStatusUpdate={loadData} />} />
+              <Route path="/profile-settings" element={<ProfileSettings currentUser={currentUser} onUpdate={(updatedUser) => console.log('Profile updated', updatedUser)} />} />
+              <Route path="/reports" element={<Reports />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="/field-report" element={<FieldReport currentUser={currentUser} />} />
+              <Route path="/equipment" element={<EquipmentManagement />} />
+              <Route path="/performance" element={<PerformanceOverview assignedTickets={[]} />} />
+              <Route path="/announcements" element={<Announcements announcements={[]} />} />
+              <Route path="/agents" element={<Agents technicians={technicians} onTechniciansChange={setTechnicians} />} />
+              <Route path="/automation" element={<Automation />} />
+              <Route path="/teams" element={<TeamsIntegration />} />
+              <Route path="/copilot" element={<CopilotAssistant />} />
+              <Route path="/tasks" element={<Tasks tasks={[]} />} />
+              <Route path="/reminders" element={<Reminders reminders={[]} />} />
+              
+              {/* Default redirect */}
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="*" element={<div className="p-6">Page not found.</div>} />
+            </Routes>
+          </main>
+
+          {/* Modals */}
           {isCreateTicketModalOpen && (
             <CreateTicket
               currentUser={currentUser}
@@ -323,22 +330,26 @@ function App() {
               onCancel={() => setIsCreateTicketModalOpen(false)}
             />
           )}
+        </div>
 
-          {/* Chat components */}
-          {isSupportChatOpen && (
+        {/* Chat components using Portal */}
+        {isSupportChatOpen && (
+          <Portal>
             <div className="fixed bottom-6 right-6 z-50">
               <ServiceDeskChatbot onClose={() => setIsSupportChatOpen(false)} />
             </div>
-          )}
+          </Portal>
+        )}
 
-          {isCopilotOpen && (
+        {isCopilotOpen && (
+          <Portal>
             <div className="fixed bottom-6 right-80 z-50">
               <CopilotAssistant onClose={() => setIsCopilotOpen(false)} />
             </div>
-          )}
-        </div>
+          </Portal>
+        )}
       </div>
-    </NotificationProvider> // <-- NEW: NotificationProvider closes
+    </NotificationProvider>
   );
 }
 

@@ -58,16 +58,16 @@ export interface Reminder {
   assignee: string;
 }
 
-export interface Announcement {
+interface Announcement {
   id: string;
   title: string;
   content: string;
-  author: string;
-  createdAt: Date;
-  priority: 'low' | 'medium' | 'high';
-  category: 'maintenance' | 'policy' | 'system_update' | 'general';
-  isActive: boolean;
+  priority: string;
+  category: string;
+  is_read: boolean;
+  created_at: string;
 }
+
 
 export interface ScheduleEvent {
   id: string;
@@ -137,3 +137,5 @@ export interface NotificationSettings {
     reminders: boolean;
   };
 }
+
+

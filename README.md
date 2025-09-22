@@ -1,225 +1,183 @@
-# ServiceDesk Plus Cloud Application
+# Supabase CLI
 
-A modern, feature-rich IT service desk application built with React, TypeScript, and Tailwind CSS. This application provides comprehensive incident management, Microsoft Teams integration, and AI-powered assistance through Microsoft 365 Copilot.
+[![Coverage Status](https://coveralls.io/repos/github/supabase/cli/badge.svg?branch=main)](https://coveralls.io/github/supabase/cli?branch=main) [![Bitbucket Pipelines](https://img.shields.io/bitbucket/pipelines/supabase-cli/setup-cli/master?style=flat-square&label=Bitbucket%20Canary)](https://bitbucket.org/supabase-cli/setup-cli/pipelines) [![Gitlab Pipeline Status](https://img.shields.io/gitlab/pipeline-status/sweatybridge%2Fsetup-cli?label=Gitlab%20Canary)
+](https://gitlab.com/sweatybridge/setup-cli/-/pipelines)
 
-## 🚀 Features
+[Supabase](https://supabase.io) is an open source Firebase alternative. We're building the features of Firebase using enterprise-grade open source tools.
 
-### Core Functionality
-- **Dashboard**: Real-time overview of tickets, metrics, and system status
-- **Ticket Management**: Create, assign, track, and resolve incidents and service requests
-- **Major Incident Management**: Coordinate critical incidents with dedicated workflows
-- **Scheduler**: Manage maintenance windows, meetings, and on-call schedules
-- **Tech Availability Chart**: Real-time view of technician status and workload
-- **Task Management**: Assign and track team tasks with priority levels
-- **Reminders**: Set and manage follow-ups and important deadlines
-- **Announcements**: Team communications and system updates
+This repository contains all the functionality for Supabase CLI.
 
-### Microsoft Integration
-- **Teams Integration**: Full ServiceDesk functionality within Microsoft Teams
-- **Microsoft 365 Copilot**: AI-powered assistance for ticket resolution
-- **Adaptive Cards**: Interactive notifications and actions in Teams
-- **Real-time Notifications**: Instant updates via Teams channels
+- [x] Running Supabase locally
+- [x] Managing database migrations
+- [x] Creating and deploying Supabase Functions
+- [x] Generating types directly from your database schema
+- [x] Making authenticated HTTP requests to [Management API](https://supabase.com/docs/reference/api/introduction)
 
-### Advanced Features
-- **Real-time Updates**: Live status updates and notifications
-- **Smart Assignment**: Intelligent ticket routing based on workload
-- **Knowledge Base Integration**: AI-powered solution suggestions
-- **Workflow Automation**: Automated escalation and routing rules
+## Getting started
 
-## 🛠️ Technology Stack
+### Install the CLI
 
-- **Frontend**: React 18 with TypeScript
-- **Styling**: Tailwind CSS
-- **Icons**: Lucide React
-- **Build Tool**: Vite
-- **Development**: Hot reload with Vite dev server
+Available via [NPM](https://www.npmjs.com) as dev dependency. To install:
 
-## 📋 Prerequisites
-
-- Node.js (version 16 or higher)
-- npm or yarn package manager
-
-## 🚀 Getting Started
-
-### Installation
-
-1. Clone the repository:
 ```bash
-git clone <repository-url>
-cd servicedesk-plus-cloud
+npm i supabase --save-dev
 ```
 
-2. Install dependencies:
+To install the beta release channel:
+
 ```bash
-npm install
+npm i supabase@beta --save-dev
 ```
 
-3. Start the development server:
+When installing with yarn 4, you need to disable experimental fetch with the following nodejs config.
+
+```
+NODE_OPTIONS=--no-experimental-fetch yarn add supabase
+```
+
+> **Note**
+For Bun versions below v1.0.17, you must add `supabase` as a [trusted dependency](https://bun.sh/guides/install/trusted) before running `bun add -D supabase`.
+
+<details>
+  <summary><b>macOS</b></summary>
+
+  Available via [Homebrew](https://brew.sh). To install:
+
+  ```sh
+  brew install supabase/tap/supabase
+  ```
+
+  To install the beta release channel:
+  
+  ```sh
+  brew install supabase/tap/supabase-beta
+  brew link --overwrite supabase-beta
+  ```
+  
+  To upgrade:
+
+  ```sh
+  brew upgrade supabase
+  ```
+</details>
+
+<details>
+  <summary><b>Windows</b></summary>
+
+  Available via [Scoop](https://scoop.sh). To install:
+
+  ```powershell
+  scoop bucket add supabase https://github.com/supabase/scoop-bucket.git
+  scoop install supabase
+  ```
+
+  To upgrade:
+
+  ```powershell
+  scoop update supabase
+  ```
+</details>
+
+<details>
+  <summary><b>Linux</b></summary>
+
+  Available via [Homebrew](https://brew.sh) and Linux packages.
+
+  #### via Homebrew
+
+  To install:
+
+  ```sh
+  brew install supabase/tap/supabase
+  ```
+
+  To upgrade:
+
+  ```sh
+  brew upgrade supabase
+  ```
+
+  #### via Linux packages
+
+  Linux packages are provided in [Releases](https://github.com/supabase/cli/releases). To install, download the `.apk`/`.deb`/`.rpm`/`.pkg.tar.zst` file depending on your package manager and run the respective commands.
+
+  ```sh
+  sudo apk add --allow-untrusted <...>.apk
+  ```
+
+  ```sh
+  sudo dpkg -i <...>.deb
+  ```
+
+  ```sh
+  sudo rpm -i <...>.rpm
+  ```
+
+  ```sh
+  sudo pacman -U <...>.pkg.tar.zst
+  ```
+</details>
+
+<details>
+  <summary><b>Other Platforms</b></summary>
+
+  You can also install the CLI via [go modules](https://go.dev/ref/mod#go-install) without the help of package managers.
+
+  ```sh
+  go install github.com/supabase/cli@latest
+  ```
+
+  Add a symlink to the binary in `$PATH` for easier access:
+
+  ```sh
+  ln -s "$(go env GOPATH)/bin/cli" /usr/bin/supabase
+  ```
+
+  This works on other non-standard Linux distros.
+</details>
+
+<details>
+  <summary><b>Community Maintained Packages</b></summary>
+
+  Available via [pkgx](https://pkgx.sh/). Package script [here](https://github.com/pkgxdev/pantry/blob/main/projects/supabase.com/cli/package.yml).
+  To install in your working directory:
+
+  ```bash
+  pkgx install supabase
+  ```
+
+  Available via [Nixpkgs](https://nixos.org/). Package script [here](https://github.com/NixOS/nixpkgs/blob/master/pkgs/development/tools/supabase-cli/default.nix).
+</details>
+
+### Run the CLI
+
 ```bash
-npm run dev
+supabase bootstrap
 ```
 
-4. Open your browser and navigate to `http://localhost:5173`
+Or using npx:
 
-### Available Scripts
-
-- `npm run dev` - Start development server
-- `npm run build` - Build for production
-- `npm run preview` - Preview production build
-- `npm run lint` - Run ESLint
-
-## 🏗️ Project Structure
-
-```
-src/
-├── components/           # React components
-│   ├── Dashboard.tsx    # Main dashboard
-│   ├── TicketList.tsx   # Ticket management
-│   ├── CreateTicket.tsx # Ticket creation form
-│   ├── TicketDetails.tsx# Detailed ticket view
-│   ├── MajorIncidentManagement.tsx
-│   ├── Scheduler.tsx    # Calendar and scheduling
-│   ├── TechAvailability.tsx
-│   ├── Tasks.tsx        # Task management
-│   ├── Reminders.tsx    # Reminder system
-│   ├── Announcements.tsx# Team announcements
-│   ├── CopilotAssistant.tsx # AI assistant
-│   ├── TeamsIntegration.tsx # Teams features
-│   ├── Header.tsx       # Application header
-│   └── Sidebar.tsx      # Navigation sidebar
-├── types/               # TypeScript type definitions
-│   └── index.ts        # All interface definitions
-├── utils/               # Utility functions
-│   └── mockData.ts     # Sample data for development
-├── App.tsx             # Main application component
-├── main.tsx            # Application entry point
-└── index.css           # Global styles
-```
-
-## 🎨 Key Components
-
-### Dashboard
-- Real-time metrics and KPIs
-- Recent ticket overview
-- Quick access to critical functions
-
-### Ticket Management
-- Create incidents and service requests
-- Advanced filtering and search
-- Real-time status updates
-- Assignment and escalation workflows
-
-### Microsoft Teams Integration
-- Native Teams tab integration
-- Adaptive card notifications
-- Teams chat support
-- Copilot AI assistance
-
-### Major Incident Management
-- Dedicated incident command center
-- Real-time collaboration tools
-- Status page integration
-- Automated communications
-
-## 🔧 Configuration
-
-### Microsoft Teams Setup
-1. Configure Teams app registration
-2. Set up webhook endpoints
-3. Enable Copilot integration
-4. Configure notification channels
-
-### Environment Variables
-Create a `.env` file in the root directory:
-```env
-VITE_TEAMS_APP_ID=your-teams-app-id
-VITE_COPILOT_ENDPOINT=your-copilot-endpoint
-VITE_API_BASE_URL=your-api-base-url
-```
-
-## 📱 Responsive Design
-
-The application is fully responsive and optimized for:
-- Desktop (1024px and above)
-- Tablet (768px - 1023px)
-- Mobile (320px - 767px)
-
-## 🎯 Usage Examples
-
-### Creating a Ticket
-1. Navigate to "Create Ticket" in the sidebar
-2. Fill in the required information
-3. Select appropriate priority and category
-4. Submit to create and auto-assign
-
-### Managing Major Incidents
-1. Go to "Major Incidents" section
-2. Declare a new major incident
-3. Set up communication channels
-4. Track progress and updates in real-time
-
-### Using Copilot Assistant
-1. Access the "Copilot Assistant" tab
-2. Ask questions about tickets or solutions
-3. Get AI-powered recommendations
-4. Execute suggested actions directly
-
-## 🔒 Security Features
-
-- Role-based access control
-- Secure API endpoints
-- Data encryption in transit
-- Audit logging for all actions
-
-## 🚀 Deployment
-
-### Production Build
 ```bash
-npm run build
+npx supabase bootstrap
 ```
 
-The build artifacts will be stored in the `dist/` directory.
+The bootstrap command will guide you through the process of setting up a Supabase project using one of the [starter](https://github.com/supabase-community/supabase-samples/blob/main/samples.json) templates.
 
-### Deployment Options
-- Static hosting (Netlify, Vercel, GitHub Pages)
-- Container deployment (Docker)
-- Cloud platforms (Azure, AWS, GCP)
+## Docs
 
-## 🤝 Contributing
+Command & config reference can be found [here](https://supabase.com/docs/reference/cli/about).
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+## Breaking changes
 
-## 📝 License
+We follow semantic versioning for changes that directly impact CLI commands, flags, and configurations.
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+However, due to dependencies on other service images, we cannot guarantee that schema migrations, seed.sql, and generated types will always work for the same CLI major version. If you need such guarantees, we encourage you to pin a specific version of CLI in package.json.
 
-## 🆘 Support
+## Developing
 
-For support and questions:
-- Create an issue in the repository
-- Contact the development team
-- Check the documentation wiki
+To run from source:
 
-## 🔄 Changelog
-
-### Version 1.0.0
-- Initial release with core functionality
-- Microsoft Teams integration
-- Copilot AI assistant
-- Major incident management
-- Real-time notifications
-
-## 🙏 Acknowledgments
-
-- Microsoft Teams Platform team
-- React and TypeScript communities
-- Tailwind CSS team
-- Lucide React icon library
-
----
-
-Built with ❤️ for modern IT service management
+```sh
+# Go >= 1.22
+go run . help
+```
