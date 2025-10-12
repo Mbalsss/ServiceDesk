@@ -12,7 +12,9 @@
   "dependencies": {
     "@azure/msal-browser": "^4.22.1",
     "@azure/msal-react": "^3.0.19",
+    "@emailjs/browser": "^4.4.1",
     "@microsoft/microsoft-graph-client": "^3.0.7",
+    "@microsoft/teams-js": "^2.45.0",
     "@supabase/supabase-js": "^2.54.0",
     "@types/react-router-dom": "^5.3.3",
     "axios": "^1.11.0",

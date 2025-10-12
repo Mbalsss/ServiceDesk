@@ -1,21 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Ticket, 
-  Clock, 
-  Activity, 
-  AlertTriangle, 
-  ChevronRight, 
-  TrendingUp, 
-  UserCheck, 
-  BarChart3,
-  CheckCircle,
-  AlertCircle,
-  PieChart,
-  Users,
-  Wrench,
-  Calendar
-} from 'lucide-react';
-import { supabase } from '../lib/supabase'; // Your Supabase client
+import { supabase } from '../lib/supabase';
 
 interface DashboardProps {
   // Props if needed
@@ -25,6 +9,8 @@ interface DashboardStats {
   totalTickets: number;
   openTickets: number;
   inProgressTickets: number;
+  onHoldTickets: number;
+  closedTickets: number;
   criticalTickets: number;
   totalUsers: number;
   totalEquipment: number;
@@ -32,6 +18,7 @@ interface DashboardStats {
   slaCompliance: number;
   escalatedTickets: number;
   avgResolutionTime: string;
+  reopenedTickets: number;
 }
 
 interface TicketType {
@@ -43,92 +30,49 @@ interface TicketType {
   created_at: string;
 }
 
+interface TicketTrend {
+  day: string;
+  date: string;
+  tickets: number;
+}
+
+interface TopPerformer {
+  id: string;
+  name: string;
+  count: number;
+}
+
 const Dashboard: React.FC<DashboardProps> = () => {
   const [stats, setStats] = useState<DashboardStats>({
     totalTickets: 0,
     openTickets: 0,
     inProgressTickets: 0,
+    onHoldTickets: 0,
+    closedTickets: 0,
     criticalTickets: 0,
     totalUsers: 0,
     totalEquipment: 0,
     maintenanceDue: 0,
     slaCompliance: 0,
     escalatedTickets: 0,
-    avgResolutionTime: '0h'
+    avgResolutionTime: '0h',
+    reopenedTickets: 0
   });
   
   const [recentTickets, setRecentTickets] = useState<TicketType[]>([]);
-  const [ticketTrends, setTicketTrends] = useState<any[]>([]);
+  const [ticketTrends, setTicketTrends] = useState<TicketTrend[]>([]);
   const [categoryData, setCategoryData] = useState<any[]>([]);
-  const [topPerformers, setTopPerformers] = useState<any[]>([]);
+  const [topPerformers, setTopPerformers] = useState<TopPerformer[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchDashboardData();
-    checkDatabaseStructure(); // For debugging
   }, []);
-
-  const checkDatabaseStructure = async () => {
-    try {
-      console.log('Checking database structure...');
-      
-      // Check if tickets table has data
-      const { count: ticketCount, error: ticketError } = await supabase
-        .from('tickets')
-        .select('*', { count: 'exact', head: true });
-      
-      if (ticketError) {
-        console.error('Error accessing tickets table:', ticketError);
-      } else {
-        console.log('Total tickets in database:', ticketCount);
-      }
-      
-      // Check if profiles table has data
-      const { count: profileCount, error: profileError } = await supabase
-        .from('profiles')
-        .select('*', { count: 'exact', head: true });
-      
-      if (profileError) {
-        console.error('Error accessing profiles table:', profileError);
-      } else {
-        console.log('Total profiles in database:', profileCount);
-      }
-      
-      // Check closed tickets
-      const { count: closedCount, error: closedError } = await supabase
-        .from('tickets')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'closed');
-      
-      if (closedError) {
-        console.error('Error checking closed tickets:', closedError);
-      } else {
-        console.log('Closed tickets:', closedCount);
-      }
-      
-      // Check tickets with assignees
-      const { count: assignedCount, error: assignedError } = await supabase
-        .from('tickets')
-        .select('*', { count: 'exact', head: true })
-        .not('assignee_id', 'is', null)
-        .eq('status', 'closed');
-      
-      if (assignedError) {
-        console.error('Error checking assigned tickets:', assignedError);
-      } else {
-        console.log('Closed tickets with assignees:', assignedCount);
-      }
-      
-    } catch (error) {
-      console.error('Error checking database structure:', error);
-    }
-  };
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
       
-      // Fetch all data in parallel
       const [
         ticketsData,
         usersData,
@@ -149,11 +93,13 @@ const Dashboard: React.FC<DashboardProps> = () => {
         fetchSlaData()
       ]);
 
-      // Process and set the data
       setStats({
         totalTickets: ticketsData.total,
         openTickets: ticketsData.open,
         inProgressTickets: ticketsData.inProgress,
+        onHoldTickets: ticketsData.onHold,
+        closedTickets: ticketsData.closed,
+        reopenedTickets: ticketsData.reopened,
         criticalTickets: ticketsData.critical,
         totalUsers: usersData,
         totalEquipment: equipmentData.total,
@@ -177,36 +123,37 @@ const Dashboard: React.FC<DashboardProps> = () => {
 
   const fetchTicketsData = async () => {
     try {
-      // Get total tickets
-      const { count: total, error: totalError } = await supabase
+      // Get all tickets and count locally - this avoids the 400 errors
+      const { data: allTickets, error: allError, count: totalCount } = await supabase
         .from('tickets')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact' });
       
-      if (totalError) throw totalError;
-
-      // Get open tickets
-      const { count: open, error: openError } = await supabase
-        .from('tickets')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'open');
+      if (allError) throw allError;
       
-      if (openError) throw openError;
-
-      // Get in-progress tickets
-      const { count: inProgress, error: progressError } = await supabase
-        .from('tickets')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'in_progress');
+      // Count tickets by status using the actual status values from your database
+      const openTickets = allTickets?.filter(ticket => 
+        ticket.status === 'open'
+      ) || [];
       
-      if (progressError) throw progressError;
-
-      // Get critical tickets
-      const { count: critical, error: criticalError } = await supabase
-        .from('tickets')
-        .select('*', { count: 'exact', head: true })
-        .eq('priority', 'critical');
+      const inProgressTickets = allTickets?.filter(ticket => 
+        ticket.status === 'in_progress'
+      ) || [];
       
-      if (criticalError) throw criticalError;
+      const onHoldTickets = allTickets?.filter(ticket => 
+        ticket.status === 'on_hold'
+      ) || [];
+      
+      const closedTickets = allTickets?.filter(ticket => 
+        ticket.status === 'closed'
+      ) || [];
+      
+      const reopenedTickets = allTickets?.filter(ticket => 
+        ticket.status === 'reopened'
+      ) || [];
+      
+      const criticalTickets = allTickets?.filter(ticket => 
+        ticket.priority === 'critical'
+      ) || [];
 
       // Get recent tickets with requester info
       const { data: recentTicketsData, error: recentError } = await supabase
@@ -235,18 +182,25 @@ const Dashboard: React.FC<DashboardProps> = () => {
       })) || [];
 
       return {
-        total: total || 0,
-        open: open || 0,
-        inProgress: inProgress || 0,
-        critical: critical || 0,
+        total: totalCount || 0,
+        open: openTickets.length,
+        inProgress: inProgressTickets.length,
+        onHold: onHoldTickets.length,
+        closed: closedTickets.length,
+        reopened: reopenedTickets.length,
+        critical: criticalTickets.length,
         recent: formattedRecentTickets
       };
+      
     } catch (error) {
       console.error('Error fetching tickets data:', error);
       return {
         total: 0,
         open: 0,
         inProgress: 0,
+        onHold: 0,
+        closed: 0,
+        reopened: 0,
         critical: 0,
         recent: []
       };
@@ -269,115 +223,105 @@ const Dashboard: React.FC<DashboardProps> = () => {
 
   const fetchEquipmentData = async () => {
     try {
-      // Get total equipment
       const { count: total, error: totalError } = await supabase
         .from('equipment')
         .select('*', { count: 'exact', head: true });
       
       if (totalError) throw totalError;
-
-      return {
-        total: total || 0
-      };
+      return { total: total || 0 };
     } catch (error) {
       console.error('Error fetching equipment data:', error);
-      return {
-        total: 0
-      };
+      return { total: 0 };
     }
   };
 
   const fetchMaintenanceData = async () => {
     try {
-      // Get equipment due for maintenance (next_maintenance_date is in the past or within 7 days)
       const { data, error } = await supabase
         .from('equipment')
         .select('id, next_maintenance_date, status')
         .lte('next_maintenance_date', new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString())
         .neq('status', 'retired');
       
-      if (error) {
-        console.error('Error fetching maintenance data:', error);
-        return 0;
-      }
-      
-      console.log('Maintenance due data:', data);
+      if (error) throw error;
       return data?.length || 0;
     } catch (error) {
-      console.error('Error in fetchMaintenanceData:', error);
+      console.error('Error fetching maintenance data:', error);
       return 0;
     }
   };
 
-  const fetchTicketTrends = async () => {
+  const fetchTicketTrends = async (): Promise<TicketTrend[]> => {
     try {
-      // Get ticket counts for the last 7 days
+      // Calculate date range for last 7 days
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 6); // 7 days including today
+      
+      // Format dates for Supabase query
+      const startDateStr = startDate.toISOString().split('T')[0];
+      const endDateStr = endDate.toISOString().split('T')[0];
+
       const { data, error } = await supabase
         .from('tickets')
         .select('created_at')
-        .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
-      
-      if (error) {
-        console.error('Error fetching ticket trends:', error);
-        // Return default empty data
-        return [
-          { day: 'Sun', tickets: 0 },
-          { day: 'Mon', tickets: 0 },
-          { day: 'Tue', tickets: 0 },
-          { day: 'Wed', tickets: 0 },
-          { day: 'Thu', tickets: 0 },
-          { day: 'Fri', tickets: 0 },
-          { day: 'Sat', tickets: 0 }
-        ];
-      }
+        .gte('created_at', `${startDateStr}T00:00:00.000Z`)
+        .lte('created_at', `${endDateStr}T23:59:59.999Z`)
+        .order('created_at', { ascending: true });
 
-      console.log('Ticket trends raw data:', data);
+      if (error) throw error;
 
-      // Group by day
+      // Initialize daily counts for the last 7 days
       const dailyCounts: { [key: string]: number } = {};
-      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const dateLabels: string[] = [];
       
-      // Initialize with zeros for the last 7 days
-      const today = new Date();
+      // Create array for last 7 days
       for (let i = 6; i >= 0; i--) {
-        const date = new Date(today);
+        const date = new Date();
         date.setDate(date.getDate() - i);
-        const dayKey = days[date.getDay()];
-        dailyCounts[dayKey] = 0;
+        const dateKey = date.toISOString().split('T')[0];
+        const label = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        
+        dailyCounts[dateKey] = 0;
+        dateLabels.push(label);
       }
 
       // Count tickets per day
       data?.forEach(ticket => {
-        const date = new Date(ticket.created_at);
-        const dayKey = days[date.getDay()];
-        dailyCounts[dayKey] = (dailyCounts[dayKey] || 0) + 1;
+        const ticketDate = new Date(ticket.created_at).toISOString().split('T')[0];
+        if (dailyCounts[ticketDate] !== undefined) {
+          dailyCounts[ticketDate]++;
+        }
       });
 
-      // Convert to array format in correct order (Sun to Sat)
-      const result = days.map(day => ({
-        day,
-        tickets: dailyCounts[day] || 0
+      // Convert to array format with proper dates
+      const result = Object.entries(dailyCounts).map(([dateKey], index) => ({
+        day: dateLabels[index],
+        date: dateKey,
+        tickets: dailyCounts[dateKey]
       }));
 
-      console.log('Processed ticket trends:', result);
       return result;
     } catch (error) {
       console.error('Error in fetchTicketTrends:', error);
-      return [
-        { day: 'Sun', tickets: 0 },
-        { day: 'Mon', tickets: 0 },
-        { day: 'Tue', tickets: 0 },
-        { day: 'Wed', tickets: 0 },
-        { day: 'Thu', tickets: 0 },
-        { day: 'Fri', tickets: 0 },
-        { day: 'Sat', tickets: 0 }
-      ];
+      // Return default empty data for last 7 days
+      const defaultData: TicketTrend[] = [];
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const label = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        defaultData.push({ 
+          day: label, 
+          date: date.toISOString().split('T')[0],
+          tickets: 0 
+        });
+      }
+      return defaultData;
     }
   };
 
   const fetchCategoryStats = async () => {
     try {
-      // Get ticket counts by category
       const { data, error } = await supabase
         .from('tickets')
         .select('category')
@@ -385,19 +329,17 @@ const Dashboard: React.FC<DashboardProps> = () => {
       
       if (error) throw error;
 
-      // Count by category
       const categoryCounts: { [key: string]: number } = {};
       data?.forEach(ticket => {
         categoryCounts[ticket.category] = (categoryCounts[ticket.category] || 0) + 1;
       });
 
-      // Map to colors
       const colorMap: { [key: string]: string } = {
-        software: 'bg-blue-500',
-        hardware: 'bg-green-500',
-        network: 'bg-yellow-500',
-        access: 'bg-purple-500',
-        other: 'bg-gray-500'
+        software: 'bg-[#5483B3]',
+        hardware: 'bg-[#7BA4D0]',
+        network: 'bg-[#5AB8A8]',
+        access: 'bg-[#D0857B]',
+        other: 'bg-[#3A5C80]'
       };
 
       const result = Object.entries(categoryCounts)
@@ -405,10 +347,9 @@ const Dashboard: React.FC<DashboardProps> = () => {
         .map(([category, count]) => ({
           category,
           count,
-          color: colorMap[category] || 'bg-gray-500'
+          color: colorMap[category] || 'bg-[#3A5C80]'
         }));
 
-      console.log('Category stats:', result);
       return result;
     } catch (error) {
       console.error('Error fetching category stats:', error);
@@ -416,71 +357,75 @@ const Dashboard: React.FC<DashboardProps> = () => {
     }
   };
 
-  const fetchTopPerformers = async () => {
+  const fetchTopPerformers = async (): Promise<TopPerformer[]> => {
     try {
-      console.log('Fetching top performers...');
-      
-      // First, check if we have any closed tickets
-      const { count: closedCount, error: countError } = await supabase
+      // Get ticket data with assignee information
+      const { data: ticketsData, error: ticketsError } = await supabase
         .from('tickets')
-        .select('*', { count: 'exact', head: true })
+        .select('id, assignee_id, closed_at')
         .eq('status', 'closed')
         .not('assignee_id', 'is', null)
+        .not('closed_at', 'is', null)
         .gte('closed_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
       
-      console.log('Closed tickets with assignees in last 30 days:', closedCount);
-      
-      if (closedCount === 0 || closedCount === null) {
+      if (ticketsError) {
+        console.error('Error fetching ticket data:', ticketsError);
         return [];
       }
       
-      // Get the actual ticket data with assignee information
-      const { data, error } = await supabase
-        .from('tickets')
-        .select(`
-          id,
-          assignee_id,
-          closed_at,
-          profiles!tickets_assignee_id_fkey(id, full_name)
-        `)
-        .eq('status', 'closed')
-        .not('assignee_id', 'is', null)
-        .gte('closed_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
-      
-      if (error) {
-        console.error('Error fetching ticket data:', error);
-        
-        // If the join fails, try getting data separately
-        return await fetchTopPerformersSeparately();
+      if (!ticketsData || ticketsData.length === 0) {
+        return [];
       }
       
-      console.log('Fetched ticket data with profiles:', data);
+      // Count closed tickets per technician
+      const technicianCounts: { [key: string]: number } = {};
+      const technicianIds: string[] = [];
       
-      // Count resolved tickets per technician
-      const technicianCounts: { [key: string]: { count: number, name: string } } = {};
-      
-      data?.forEach(ticket => {
-        if (ticket.assignee_id) {
+      ticketsData.forEach(ticket => {
+        if (ticket.assignee_id && ticket.closed_at) {
           const techId = ticket.assignee_id;
-          if (!technicianCounts[techId]) {
-            technicianCounts[techId] = {
-              count: 0,
-              name: ticket.profiles?.full_name || `Technician ${techId.substring(0, 8)}`
-            };
+          technicianCounts[techId] = (technicianCounts[techId] || 0) + 1;
+          if (!technicianIds.includes(techId)) {
+            technicianIds.push(techId);
           }
-          technicianCounts[techId].count += 1;
         }
       });
       
-      console.log('Technician counts:', technicianCounts);
+      if (technicianIds.length === 0) {
+        return [];
+      }
       
-      // Convert to array and sort
-      const performers = Object.entries(technicianCounts)
-        .map(([id, { name, count }]) => ({ id, name, count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 3);
+      // Get technician names
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', technicianIds);
       
-      console.log('Final top performers:', performers);
+      if (profilesError) {
+        console.error('Error fetching profiles:', profilesError);
+        // Return with placeholder names if profile fetch fails
+        return Object.entries(technicianCounts)
+          .map(([id, count]) => ({ 
+            id, 
+            name: `Technician ${id.substring(0, 8)}`,
+            count 
+          }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 5);
+      }
+      
+      // Combine the data
+      const performers = technicianIds.map(technicianId => {
+        const profile = profilesData?.find(p => p.id === technicianId);
+        return {
+          id: technicianId,
+          name: profile?.full_name || `Technician ${technicianId.substring(0, 8)}`,
+          count: technicianCounts[technicianId] || 0
+        };
+      })
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+      
       return performers;
       
     } catch (error) {
@@ -489,79 +434,14 @@ const Dashboard: React.FC<DashboardProps> = () => {
     }
   };
 
-  const fetchTopPerformersSeparately = async () => {
-    try {
-      console.log('Fetching data separately...');
-      
-      // Get ticket data without join
-      const { data: ticketsData, error: ticketsError } = await supabase
-        .from('tickets')
-        .select('assignee_id, closed_at')
-        .eq('status', 'closed')
-        .not('assignee_id', 'is', null)
-        .gte('closed_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
-      
-      if (ticketsError) {
-        console.error('Error fetching tickets:', ticketsError);
-        return [];
-      }
-      
-      console.log('Raw tickets data:', ticketsData);
-      
-      // Count tickets per assignee
-      const assigneeCounts: { [key: string]: number } = {};
-      ticketsData?.forEach(ticket => {
-        if (ticket.assignee_id) {
-          assigneeCounts[ticket.assignee_id] = (assigneeCounts[ticket.assignee_id] || 0) + 1;
-        }
-      });
-      
-      console.log('Assignee counts:', assigneeCounts);
-      
-      // Get profile information for these assignees
-      const assigneeIds = Object.keys(assigneeCounts);
-      if (assigneeIds.length === 0) {
-        return [];
-      }
-      
-      const { data: profilesData, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, full_name')
-        .in('id', assigneeIds);
-      
-      if (profilesError) {
-        console.error('Error fetching profiles:', profilesError);
-        return [];
-      }
-      
-      console.log('Profiles data:', profilesData);
-      
-      // Combine the data
-      const performers = assigneeIds.map(assigneeId => {
-        const profile = profilesData?.find(p => p.id === assigneeId);
-        return {
-          id: assigneeId,
-          name: profile?.full_name || `Technician ${assigneeId.substring(0, 8)}`,
-          count: assigneeCounts[assigneeId]
-        };
-      }).sort((a, b) => b.count - a.count).slice(0, 3);
-      
-      console.log('Final performers with separate queries:', performers);
-      return performers;
-      
-    } catch (error) {
-      console.error('Error in fetchTopPerformersSeparately:', error);
-      return [];
-    }
-  };
-
   const fetchSlaData = async () => {
     try {
-      // Calculate SLA compliance (tickets closed before SLA deadline)
+      // Calculate SLA compliance for closed tickets only
       const { data: closedTickets, error } = await supabase
         .from('tickets')
         .select('created_at, closed_at, sla_deadline, priority')
         .not('sla_deadline', 'is', null)
+        .eq('status', 'closed')
         .not('closed_at', 'is', null);
       
       if (error) {
@@ -572,8 +452,6 @@ const Dashboard: React.FC<DashboardProps> = () => {
           escalated: 0
         };
       }
-
-      console.log('SLA raw data:', closedTickets);
 
       let compliant = 0;
       let total = 0;
@@ -610,7 +488,6 @@ const Dashboard: React.FC<DashboardProps> = () => {
         escalated: escalated
       };
 
-      console.log('SLA calculated result:', result);
       return result;
     } catch (error) {
       console.error('Error in fetchSlaData:', error);
@@ -630,218 +507,254 @@ const Dashboard: React.FC<DashboardProps> = () => {
       default: return 'bg-gray-100 text-gray-700';
     }
   };
+
+  // Calculate max tickets for chart scaling
+  const maxTickets = Math.max(...ticketTrends.map(trend => trend.tickets), 1);
   
-  // Overview cards - using real data from stats
+  // Overview cards without icons
   const overviewCards = [
-    { title: 'Total Tickets', value: stats.totalTickets, icon: Ticket, color: 'blue' },
-    { title: 'Open Tickets', value: stats.openTickets, icon: Clock, color: 'orange' },
-    { title: 'In Progress', value: stats.inProgressTickets, icon: Activity, color: 'yellow' },
-    { title: 'Critical Incidents', value: stats.criticalTickets, icon: AlertTriangle, color: 'red' }
+    { title: 'Total Tickets', value: stats.totalTickets },
+    { title: 'Open Tickets', value: stats.openTickets },
+    { title: 'In Progress', value: stats.inProgressTickets },
+    { title: 'On Hold', value: stats.onHoldTickets },
+    { title: 'Closed Tickets', value: stats.closedTickets },
+    { title: 'Critical Issues', value: stats.criticalTickets }
   ];
 
-  // System metrics - using real data from stats
+  // System metrics without icons
   const systemMetrics = [
-    { title: 'Total Users', value: stats.totalUsers, icon: Users, color: 'indigo' },
-    { title: 'Total Equipment', value: stats.totalEquipment, icon: Wrench, color: 'gray' },
-    { title: 'Maintenance Due', value: stats.maintenanceDue, icon: Calendar, color: 'amber' }
+    { title: 'Total Users', value: stats.totalUsers },
+    { title: 'Total Equipment', value: stats.totalEquipment },
+    { title: 'Maintenance Due', value: stats.maintenanceDue }
   ];
 
-  // Performance metrics - using real data from stats
+  // Performance metrics without icons
   const performanceMetrics = [
-    { title: 'SLA Compliance', value: `${stats.slaCompliance}%`, icon: CheckCircle, color: 'green' },
-    { title: 'Escalated Tickets', value: stats.escalatedTickets, icon: AlertCircle, color: 'red' },
-    { title: 'Avg. Resolution Time', value: stats.avgResolutionTime, icon: Clock, color: 'blue' }
+    { title: 'SLA Compliance', value: `${stats.slaCompliance}%` },
+    { title: 'Escalated Tickets', value: stats.escalatedTickets },
+    { title: 'Avg. Resolution Time', value: stats.avgResolutionTime },
+    { title: 'Reopened Tickets', value: stats.reopenedTickets }
   ];
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading dashboard data...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#5483B3] mx-auto"></div>
+          <p className="mt-4 text-gray-600 text-sm sm:text-base">Loading dashboard data...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-gray-50 p-3 sm:p-4 md:p-6 lg:p-8">
+      {/* Main Container */}
+      <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
+        
         {/* Header Section */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Super Admin Dashboard</h1>
-          <p className="text-gray-600 mt-2">
-            Comprehensive overview of service desk performance and metrics.
-          </p>
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+          <div>
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+            <p className="text-gray-600 mt-1 text-sm sm:text-base">
+              Comprehensive overview of service desk performance and metrics
+            </p>
+          </div>
         </div>
 
-        {/* Overview Cards Section */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {overviewCards.map(card => {
-            const Icon = card.icon;
-            const colorClass = `text-${card.color}-600`;
-            const bgClass = `bg-${card.color}-100`;
-            
-            return (
-              <div key={card.title} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 flex items-center gap-5">
-                <div className={`p-3 rounded-lg ${bgClass}`}>
-                  <Icon className={`w-7 h-7 ${colorClass}`} />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500">{card.title}</p>
-                  <p className="text-3xl font-bold text-gray-800">{card.value}</p>
-                </div>
+        {/* Overview Cards Section - Mobile Optimized */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 lg:gap-4">
+          {overviewCards.map(card => (
+            <div key={card.title} className="bg-white rounded-lg shadow-sm border border-gray-200 p-2 sm:p-3 lg:p-4 transition-all hover:shadow-md">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs sm:text-sm font-medium text-gray-500 truncate">{card.title}</p>
+                <p className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-800 truncate">{card.value}</p>
               </div>
-            );
-          })}
-        </div>
-
-        {/* System Metrics Section */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          {systemMetrics.map(metric => {
-            const Icon = metric.icon;
-            const colorClass = `text-${metric.color}-600`;
-            const bgClass = `bg-${metric.color}-100`;
-            
-            return (
-              <div key={metric.title} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 flex items-center gap-5">
-                <div className={`p-3 rounded-lg ${bgClass}`}>
-                  <Icon className={`w-7 h-7 ${colorClass}`} />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-500">{metric.title}</p>
-                  <p className="text-3xl font-bold text-gray-800">{metric.value}</p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Performance & Trends Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          {/* Ticket Trends Chart */}
-          <div className="lg:col-span-2 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-800">Ticket Trends (Last 7 Days)</h2>
-              <TrendingUp className="w-5 h-5 text-gray-400" />
             </div>
-            <div className="h-64 flex items-end space-x-2 justify-around">
-              {ticketTrends.map((item, index) => (
-                <div key={index} className="flex flex-col items-center flex-1">
-                  <div 
-                    className="w-full bg-blue-500 rounded-t-md hover:bg-blue-600 transition-colors"
-                    style={{ height: `${Math.max(10, item.tickets * 10)}px` }}
-                    title={`${item.tickets} tickets`}
-                  ></div>
-                  <span className="text-xs text-gray-500 mt-2">{item.day}</span>
-                </div>
-              ))}
+          ))}
+        </div>
+
+        {/* System Metrics Section - Mobile Optimized */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
+          {systemMetrics.map(metric => (
+            <div key={metric.title} className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4 lg:p-6 transition-all hover:shadow-md">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-gray-500 truncate">{metric.title}</p>
+                <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-800 truncate">{metric.value}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Performance & Trends Section - Mobile Optimized */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+          {/* Ticket Trends Chart */}
+          <div className="lg:col-span-2 bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-4 sm:mb-6">
+              <h2 className="text-base sm:text-lg font-semibold text-gray-800">Ticket Trends (Last 7 Days)</h2>
+            </div>
+            <div className="h-48 sm:h-56 lg:h-64">
+              <div className="h-full flex items-end space-x-1 sm:space-x-2 justify-between">
+                {ticketTrends.map((item, index) => {
+                  const heightPercentage = (item.tickets / maxTickets) * 100;
+                  
+                  return (
+                    <div key={index} className="flex flex-col items-center flex-1">
+                      <div 
+                        className="w-full bg-gradient-to-t from-[#5483B3] to-[#7BA4D0] rounded-t-md hover:from-[#3A5C80] hover:to-[#5483B3] transition-all duration-200 min-h-2"
+                        style={{ height: `${Math.max(8, heightPercentage)}%` }}
+                        title={`${item.tickets} tickets on ${item.day}`}
+                      >
+                        {item.tickets > 0 && (
+                          <div className="text-white text-xs font-bold text-center mt-1">
+                            {item.tickets}
+                          </div>
+                        )}
+                      </div>
+                      <span className="text-xs text-gray-500 mt-2 text-center leading-tight">
+                        {item.day.split(',')[0]}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
           {/* Performance Metrics */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-800">Performance Metrics</h2>
-              <BarChart3 className="w-5 h-5 text-gray-400" />
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-4 sm:mb-6">
+              <h2 className="text-base sm:text-lg font-semibold text-gray-800">Performance Metrics</h2>
             </div>
-            <div className="space-y-4">
-              {performanceMetrics.map(metric => {
-                const Icon = metric.icon;
-                const colorClass = `text-${metric.color}-600`;
-                const bgClass = `bg-${metric.color}-100`;
-                
-                return (
-                  <div key={metric.title} className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-lg ${bgClass}`}>
-                        <Icon className={`w-5 h-5 ${colorClass}`} />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-500">{metric.title}</p>
-                        <p className="text-xl font-bold text-gray-800">{metric.value}</p>
-                      </div>
-                    </div>
+            <div className="space-y-3 sm:space-y-4">
+              {performanceMetrics.map(metric => (
+                <div key={metric.title} className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 transition-colors">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-500 truncate">{metric.title}</p>
+                    <p className="text-lg sm:text-xl font-bold text-gray-800 truncate">{metric.value}</p>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* Focus Areas Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          {/* Top Issue Categories */}
-          <div className="lg:col-span-2 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-800">Top Issue Categories (Last 30 Days)</h2>
-              <PieChart className="w-5 h-5 text-gray-400" />
-            </div>
-            <div className="space-y-3">
-              {categoryData.map((item, index) => (
-                <div key={index} className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-3 h-3 rounded-full ${item.color}`}></div>
-                    <span className="text-sm font-medium text-gray-700 capitalize">{item.category}</span>
-                  </div>
-                  <span className="text-sm text-gray-500">{item.count} tickets</span>
                 </div>
               ))}
             </div>
           </div>
+        </div>
 
-          {/* Top Performers */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-gray-800">Top Performers (Last 30 Days)</h2>
-              <UserCheck className="w-5 h-5 text-gray-400" />
+        {/* Focus Areas Section - Mobile Optimized */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+          {/* Top Issue Categories */}
+          <div className="lg:col-span-2 bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-4 sm:mb-6">
+              <h2 className="text-base sm:text-lg font-semibold text-gray-800">Top Issue Categories (Last 30 Days)</h2>
             </div>
-            <div className="space-y-4">
-              {topPerformers.map((performer, index) => {
-                const initials = performer.name.split(' ').map((n: string) => n[0]).join('').toUpperCase();
-                const colors = ['blue', 'green', 'yellow'];
-                const color = colors[index] || 'gray';
-                
-                return (
-                  <div key={performer.id} className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 bg-${color}-100 rounded-full flex items-center justify-center`}>
-                        <span className={`text-sm font-bold text-${color}-600`}>{initials}</span>
-                      </div>
-                      <span className="text-sm font-medium text-gray-700">{performer.name}</span>
-                    </div>
-                    <span className="text-sm font-bold text-green-600">{performer.count} resolved</span>
+            <div className="space-y-2 sm:space-y-3">
+              {categoryData.map((item, index) => (
+                <div key={index} className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50 transition-colors">
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <div className={`w-2 h-2 sm:w-3 sm:h-3 rounded-full ${item.color}`}></div>
+                    <span className="text-sm font-medium text-gray-700 capitalize truncate">{item.category}</span>
                   </div>
-                );
-              })}
-              {topPerformers.length === 0 && (
-                <p className="text-sm text-gray-500">No performance data available</p>
+                  <span className="text-sm text-gray-500 whitespace-nowrap">{item.count} tickets</span>
+                </div>
+              ))}
+              {categoryData.length === 0 && (
+                <p className="text-sm text-gray-500 p-2">No category data available</p>
               )}
             </div>
           </div>
+
+          {/* Top Performers */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-4 sm:mb-6">
+              <h2 className="text-base sm:text-lg font-semibold text-gray-800">Top Performers (Last 30 Days)</h2>
+            </div>
+            <div className="space-y-3 sm:space-y-4">
+              {topPerformers.length > 0 ? (
+                topPerformers.map((performer, index) => {
+                  const initials = performer.name.split(' ').map((n: string) => n[0]).join('').toUpperCase();
+                  const rankColors = [
+                    'bg-gradient-to-br from-yellow-400 to-yellow-500', // Gold
+                    'bg-gradient-to-br from-gray-400 to-gray-500',     // Silver
+                    'bg-gradient-to-br from-amber-600 to-amber-700',   // Bronze
+                    'bg-gradient-to-br from-[#5483B3] to-[#7BA4D0]',  // Brand Blue
+                    'bg-gradient-to-br from-[#5AB8A8] to-[#7BD0C5]'   // Brand Teal
+                  ];
+                  const color = rankColors[index] || 'bg-gradient-to-br from-[#3A5C80] to-[#5483B3]';
+                  
+                  return (
+                    <div key={performer.id} className="flex items-center justify-between group hover:bg-gray-50 p-2 rounded-lg transition-colors">
+                      <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                        <div className="relative flex-shrink-0">
+                          <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center ${color} text-white font-bold`}>
+                            <span className="text-xs sm:text-sm font-bold">{initials}</span>
+                          </div>
+                          {index < 3 && (
+                            <div className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-[#5483B3] rounded-full flex items-center justify-center border-2 border-white">
+                              <span className="text-xs font-bold text-white">{index + 1}</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <span className="text-sm font-medium text-gray-700 truncate block">{performer.name}</span>
+                          <div className="flex items-center gap-1 sm:gap-2 mt-0.5">
+                            <span className="text-xs text-gray-500 truncate">{performer.count} closed</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0 ml-2">
+                        <span className="text-sm font-bold text-[#5483B3]">{performer.count}</span>
+                        <div className="text-xs text-gray-400">tickets</div>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="text-center py-4 sm:py-8">
+                  <p className="text-sm text-gray-500">No performance data available</p>
+                  <p className="text-xs text-gray-400 mt-1">Closed tickets from last 30 days will appear here</p>
+                </div>
+              )}
+            </div>
+            
+            {/* Performance Summary */}
+            {topPerformers.length > 0 && (
+              <div className="mt-4 sm:mt-6 pt-4 sm:pt-6 border-t border-gray-200">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500">Total Closures:</span>
+                  <span className="font-semibold text-[#5483B3]">
+                    {topPerformers.reduce((sum, performer) => sum + performer.count, 0)} tickets
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm mt-1 sm:mt-2">
+                  <span className="text-gray-500">Top Performer:</span>
+                  <span className="font-semibold text-[#5483B3] truncate ml-2">
+                    {topPerformers[0]?.name} ({topPerformers[0]?.count})
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
         
-        {/* Recent Tickets Section */}
+        {/* Recent Tickets Section - Mobile Optimized */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          <div className="p-6 border-b border-gray-200">
+          <div className="p-4 sm:p-6 border-b border-gray-200">
             <h2 className="text-lg font-bold text-gray-800">Recent Tickets</h2>
             <p className="text-sm text-gray-500">A summary of the latest tickets created.</p>
           </div>
           <div className="divide-y divide-gray-200">
             {recentTickets.length > 0 ? (
               recentTickets.map(ticket => (
-                <div key={ticket.id} className="flex items-center justify-between p-4 hover:bg-gray-50">
-                  <div>
-                    <p className="font-semibold text-gray-800">{ticket.title}</p>
-                    <p className="text-sm text-gray-500">
+                <div key={ticket.id} className="flex items-center justify-between p-3 sm:p-4 hover:bg-gray-50 transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-800 truncate text-sm sm:text-base">{ticket.title}</p>
+                    <p className="text-xs sm:text-sm text-gray-500 truncate">
                       Requested by {ticket.requester} • {new Date(ticket.created_at).toLocaleDateString()}
                     </p>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold capitalize ${getPriorityPillColor(ticket.priority)}`}>
+                  <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
+                    <span className={`px-2 py-1 rounded-full text-xs font-semibold capitalize ${getPriorityPillColor(ticket.priority)} whitespace-nowrap`}>
                       {ticket.priority}
                     </span>
-                    <ChevronRight className="w-5 h-5 text-gray-400" />
                   </div>
                 </div>
               ))

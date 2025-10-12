@@ -1,0 +1,6 @@
+project:
+  appName: HapoDesk
+  version: 1.0.0
+  programmingLanguage: typescript
+  capabilities:
+    - Tab

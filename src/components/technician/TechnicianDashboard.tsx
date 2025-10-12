@@ -1,6 +1,5 @@
 // src/components/technician/TechnicianDashboard.tsx
 import React, { useState, useEffect } from 'react';
-import { Ticket, Clock, Activity, AlertTriangle, X, MessageSquare, User, AlertCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface TechnicianDashboardProps {
@@ -20,7 +19,6 @@ interface TicketType {
   assignee_id: string | null;
   requester_name?: string;
   assignee_name?: string;
-  estimatedTime?: string;
   image_url?: string;
   created_at: string;
   updated_at: string;
@@ -37,25 +35,13 @@ interface CommentType {
   created_at: string;
 }
 
-type ActiveView =
-  | 'dashboard'
-  | 'assigned_tickets'
-  | 'unassigned_tickets'
-  | 'ticket_actions'
-  | 'search_tickets'
-  | 'performance'
-  | 'internal_comments'
-  | 'field_report';
-
 const TechnicianDashboard: React.FC<TechnicianDashboardProps> = ({ currentUser }) => {
   const [assignedTickets, setAssignedTickets] = useState<TicketType[]>([]);
   const [unassignedTickets, setUnassignedTickets] = useState<TicketType[]>([]);
-  const [allTickets, setAllTickets] = useState<TicketType[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [selectedTicket, setSelectedTicket] = useState<TicketType | null>(null);
-  const [activeView, setActiveView] = useState<ActiveView>('dashboard');
 
   // Clear notifications after 5 seconds
   useEffect(() => {
@@ -83,12 +69,11 @@ const TechnicianDashboard: React.FC<TechnicianDashboardProps> = ({ currentUser }
         ...t,
         requester_name: t.requester_id?.full_name || 'Unknown',
         assignee_name: t.assignee_id?.full_name || 'Unassigned',
-        estimatedTime: '2 hours',
       }));
       setAssignedTickets(tickets);
     } catch (err) {
       console.error(err);
-      setError('Failed to load assigned tickets.');
+      setError('Failed to load your tickets.');
     } finally {
       setLoading(false);
     }
@@ -106,37 +91,11 @@ const TechnicianDashboard: React.FC<TechnicianDashboardProps> = ({ currentUser }
       const tickets = (data || []).map((t: any) => ({
         ...t,
         requester_name: t.requester_id?.full_name || 'Unknown',
-        estimatedTime: '2 hours',
       }));
       setUnassignedTickets(tickets);
     } catch (err) {
       console.error(err);
       setError('Failed to load unassigned tickets.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchAllTickets = async () => {
-    try {
-      setLoading(true);
-      const { data, error: supabaseError } = await supabase
-        .from('tickets')
-        .select(
-          `*, requester_id:profiles!tickets_requester_id_fkey(full_name), assignee_id:profiles!tickets_assignee_id_fkey(full_name)`
-        )
-        .order('created_at', { ascending: false });
-      if (supabaseError) throw supabaseError;
-      const tickets = (data || []).map((t: any) => ({
-        ...t,
-        requester_name: t.requester_id?.full_name || 'Unknown',
-        assignee_name: t.assignee_id?.full_name || 'Unassigned',
-        estimatedTime: '2 hours',
-      }));
-      setAllTickets(tickets);
-    } catch (err) {
-      console.error(err);
-      setError('Failed to load tickets.');
     } finally {
       setLoading(false);
     }
@@ -166,53 +125,9 @@ const TechnicianDashboard: React.FC<TechnicianDashboardProps> = ({ currentUser }
 
   useEffect(() => {
     if (!currentUser?.id) return;
-    
-    switch (activeView) {
-      case 'dashboard':
-      case 'assigned_tickets':
-        fetchAssignedTickets();
-        break;
-      case 'unassigned_tickets':
-        fetchUnassignedTickets();
-        break;
-      case 'search_tickets':
-        fetchAllTickets();
-        break;
-    }
-  }, [activeView, currentUser.id]);
-
-  const handleTakeTicket = async (ticketId: string) => {
-    try {
-      const { error } = await supabase
-        .from('tickets')
-        .update({ status: 'in_progress', assignee_id: currentUser.id, updated_at: new Date().toISOString() })
-        .eq('id', ticketId);
-      if (error) throw error;
-      setUnassignedTickets(prev => prev.filter(t => t.id !== ticketId));
-      const ticket = unassignedTickets.find(t => t.id === ticketId);
-      if (ticket) setAssignedTickets(prev => [...prev, { ...ticket, status: 'in_progress' }]);
-      setSuccess('Ticket assigned to you successfully!');
-    } catch (err) {
-      console.error(err);
-      setError('Failed to take ticket.');
-    }
-  };
-
-  const handleUpdateTicketStatus = async (ticketId: string, status: string) => {
-    try {
-      const { error } = await supabase
-        .from('tickets')
-        .update({ status, updated_at: new Date().toISOString() })
-        .eq('id', ticketId);
-      if (error) throw error;
-      setAssignedTickets(prev => prev.map(t => (t.id === ticketId ? { ...t, status } : t)));
-      if (selectedTicket?.id === ticketId) setSelectedTicket({ ...selectedTicket, status });
-      setSuccess(`Ticket status updated to ${status.replace('_', ' ')} successfully!`);
-    } catch (err) {
-      console.error(err);
-      setError('Failed to update ticket.');
-    }
-  };
+    fetchAssignedTickets();
+    fetchUnassignedTickets();
+  }, [currentUser.id]);
 
   const openTicketDetails = async (ticket: TicketType) => {
     const comments = await fetchTicketComments(ticket.id);
@@ -233,227 +148,253 @@ const TechnicianDashboard: React.FC<TechnicianDashboardProps> = ({ currentUser }
     low: 'text-gray-700 bg-gray-100',
   }[priority] || 'text-gray-700 bg-gray-100');
 
-  const dashboardCards = [
-    { title: 'Assigned', value: assignedTickets.length, icon: Ticket, color: 'blue', description: 'Tickets assigned to you' },
-    { title: 'Open', value: assignedTickets.filter(t => t.status === 'open').length, icon: Clock, color: 'orange', description: 'Tickets waiting for action' },
-    { title: 'In Progress', value: assignedTickets.filter(t => t.status === 'in_progress').length, icon: Activity, color: 'yellow', description: 'Active tickets you\'re working on' },
-    { title: 'Critical', value: assignedTickets.filter(t => t.priority === 'critical').length, icon: AlertTriangle, color: 'red', description: 'High priority tickets needing attention' },
-  ];
-
-  // Get title based on active view
-  const getTitle = () => {
-    switch (activeView) {
-      case 'dashboard': return 'Dashboard';
-      case 'assigned_tickets': return 'My Assigned Tickets';
-      case 'unassigned_tickets': return 'Unassigned Tickets Queue';
-      case 'search_tickets': return 'Search Tickets';
-      case 'performance': return 'Performance Overview';
-      case 'internal_comments': return 'Internal Comments';
-      case 'field_report': return 'Field Reports';
-      default: return 'Dashboard';
+  // Calculate SLA status - returns empty for closed/resolved tickets
+  const getSLAStatus = (slaDeadline: string | undefined, status: string) => {
+    // Don't show SLA for closed or resolved tickets
+    if (status === 'closed' || status === 'resolved') {
+      return { text: '', color: '' };
     }
+    
+    if (!slaDeadline) return { text: 'No SLA', color: 'text-gray-500' };
+    
+    const now = new Date();
+    const deadline = new Date(slaDeadline);
+    const timeDiff = deadline.getTime() - now.getTime();
+    const hoursDiff = timeDiff / (1000 * 60 * 60);
+
+    if (hoursDiff < 0) return { text: 'SLA Breached', color: 'text-red-600' };
+    if (hoursDiff < 24) return { text: 'Due Soon', color: 'text-orange-600' };
+    return { text: 'On Track', color: 'text-green-600' };
   };
+
+  const dashboardCards = [
+    { 
+      title: 'Total Assigned', 
+      value: assignedTickets.length, 
+      color: 'blue', 
+      description: 'All tickets assigned to you' 
+    },
+    { 
+      title: 'Waiting Action', 
+      value: unassignedTickets.length, 
+      color: 'orange', 
+      description: 'Unassigned tickets available to claim' 
+    },
+    { 
+      title: 'In Progress', 
+      value: assignedTickets.filter(t => t.status === 'in_progress').length, 
+      color: 'yellow', 
+      description: 'Active tickets you\'re working on' 
+    },
+    { 
+      title: 'Critical Priority', 
+      value: assignedTickets.filter(t => t.priority === 'critical').length, 
+      color: 'red', 
+      description: 'High priority tickets needing immediate attention' 
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-gray-100">
-      {/* Notification Area */}
+      {/* Notification Area - Mobile Improved */}
       {(error || success) && (
-        <div className={`px-6 py-3 ${error ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-          <div className="max-w-7xl mx-auto flex justify-between items-center">
-            <p>{error || success}</p>
-            <button onClick={() => error ? setError(null) : setSuccess(null)}>
-              <X className="w-4 h-4" />
+        <div className={`px-4 py-3 ${error ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+          <div className="flex justify-between items-center">
+            <p className="text-sm break-words flex-1 pr-2">{error || success}</p>
+            <button 
+              onClick={() => error ? setError(null) : setSuccess(null)} 
+              className="flex-shrink-0 text-lg font-bold w-6 h-6 flex items-center justify-center"
+            >
+              ×
             </button>
           </div>
         </div>
       )}
 
-      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <h1 className="text-3xl font-bold text-gray-900 mb-6">{getTitle()}</h1>
+      <div className="max-w-7xl mx-auto py-4 sm:py-6 px-3 sm:px-4 lg:px-8">
+        <div className="px-2 sm:px-0">
+          {/* Technician Dashboard Header - Mobile Improved */}
+          <div className="mb-4 sm:mb-6">
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">Technician Dashboard</h1>
+            <div className="border-b border-gray-200 pb-3 sm:pb-4 mt-2">
+              <p className="text-xs sm:text-sm text-gray-500">
+                Manage your assigned tickets, track progress, and update ticket status
+              </p>
+            </div>
+          </div>
           
-          <div className="space-y-6">
-            {activeView === 'dashboard' && (
-              <>
-                {/* Dashboard Stats */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
-                  {dashboardCards.map(card => {
-                    const Icon = card.icon;
-                    const colorMap = {
-                      blue: { bg: 'bg-blue-100', text: 'text-blue-600' },
-                      orange: { bg: 'bg-orange-100', text: 'text-orange-600' },
-                      yellow: { bg: 'bg-yellow-100', text: 'text-yellow-600' },
-                      red: { bg: 'bg-red-100', text: 'text-red-600' },
-                    };
-                    return (
-                      <div key={card.title} className="bg-white shadow rounded-lg border border-gray-200 p-5 transition-all hover:shadow-md">
-                        <div className="flex items-center">
-                          <div className={`p-3 rounded-lg ${colorMap[card.color].bg}`}>
-                            <Icon className={`w-6 h-6 ${colorMap[card.color].text}`} />
-                          </div>
-                          <div className="ml-4">
-                            <p className="text-sm text-gray-500">{card.title}</p>
-                            <p className="text-2xl font-bold text-gray-800">{card.value}</p>
-                          </div>
-                        </div>
-                        <p className="text-xs text-gray-500 mt-3">{card.description}</p>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Active Tickets Section */}
-                <div className="bg-white shadow rounded-lg border border-gray-200">
-                  <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-                    <h2 className="text-lg font-semibold text-gray-800">Your Active Tickets</h2>
-                    <span className="text-sm text-gray-500">
-                      {assignedTickets.length} tickets
-                    </span>
+          <div className="space-y-4 sm:space-y-6">
+            {/* Dashboard Stats - Mobile Improved */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
+              {dashboardCards.map(card => {
+                const colorMap = {
+                  blue: { bg: 'bg-blue-100', text: 'text-blue-600' },
+                  orange: { bg: 'bg-orange-100', text: 'text-orange-600' },
+                  yellow: { bg: 'bg-yellow-100', text: 'text-yellow-600' },
+                  red: { bg: 'bg-red-100', text: 'text-red-600' },
+                };
+                const colors = colorMap[card.color as keyof typeof colorMap];
+                return (
+                  <div key={card.title} className="bg-white shadow rounded-lg border border-gray-200 p-3 sm:p-4 lg:p-5 transition-all hover:shadow-md">
+                    <div>
+                      <p className="text-xs sm:text-sm text-gray-500 mb-1 sm:mb-2 truncate">{card.title}</p>
+                      <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-800">{card.value}</p>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2 sm:mt-3 line-clamp-2">{card.description}</p>
                   </div>
-                  
-                  <div className="p-6">
-                    {assignedTickets.length === 0 ? (
-                      <div className="text-center py-8">
-                        <Ticket className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                        <p className="text-gray-500 mb-2">No tickets assigned to you.</p>
-                        <p className="text-sm text-gray-400">
-                          {loading ? 'Loading...' : 'Check the Available Tickets section to claim new tickets.'}
-                        </p>
-                        <button 
-                          onClick={() => setActiveView('unassigned_tickets')}
-                          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
-                        >
-                          View Available Tickets
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                        {assignedTickets.map(ticket => (
-                          <div key={ticket.id} className="bg-gray-50 border border-gray-200 rounded-lg p-5 flex flex-col justify-between transition-all hover:shadow-md">
-                            <div>
-                              <div className="flex justify-between items-start mb-2">
-                                <h3 className="font-semibold text-gray-900 pr-2 line-clamp-1">{ticket.title}</h3>
-                                <span className={`px-2.5 py-1 rounded-full text-xs font-semibold capitalize ${priorityColor(ticket.priority)}`}>
-                                  {ticket.priority}
+                );
+              })}
+            </div>
+
+            {/* My Active Tickets Section - Mobile Improved */}
+            <div className="bg-white shadow rounded-lg border border-gray-200">
+              <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+                <h2 className="text-base sm:text-lg font-semibold text-gray-800">My Active Tickets</h2>
+                <span className="text-xs sm:text-sm text-gray-500 bg-blue-50 px-2 sm:px-3 py-1 rounded-full self-start sm:self-auto">
+                  {assignedTickets.length} tickets in your queue
+                </span>
+              </div>
+              
+              <div className="p-3 sm:p-4 lg:p-6">
+                {assignedTickets.length === 0 ? (
+                  <div className="text-center py-6 sm:py-8">
+                    <p className="text-gray-500 mb-2 text-sm sm:text-base">No tickets assigned to you.</p>
+                    <p className="text-xs sm:text-sm text-gray-400">
+                      {loading ? 'Loading...' : 'All your assigned tickets will appear here.'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
+                    {assignedTickets.map(ticket => {
+                      const slaStatus = getSLAStatus(ticket.sla_deadline, ticket.status);
+                      
+                      return (
+                        <div key={ticket.id} className="bg-gray-50 border border-gray-200 rounded-lg p-3 sm:p-4 lg:p-5 flex flex-col justify-between transition-all hover:shadow-md">
+                          <div>
+                            <div className="flex justify-between items-start mb-2 gap-2">
+                              <h3 className="font-semibold text-gray-900 text-sm sm:text-base flex-1 line-clamp-2 min-w-0">{ticket.title}</h3>
+                              <span className={`px-2 py-1 rounded-full text-xs font-semibold capitalize flex-shrink-0 ${priorityColor(ticket.priority)}`}>
+                                {ticket.priority}
+                              </span>
+                            </div>
+                            <p className="text-xs sm:text-sm text-gray-600 mb-3 sm:mb-4 line-clamp-2">{ticket.description}</p>
+                            <div className="grid grid-cols-2 gap-x-2 sm:gap-x-4 gap-y-1 sm:gap-y-2 text-xs sm:text-sm text-gray-500 border-t pt-3 sm:pt-4">
+                              <span className="truncate"><strong>ID:</strong> {ticket.id.slice(0, 6)}...</span>
+                              <span className="truncate capitalize"><strong>Type:</strong> {ticket.type.replace('_', ' ')}</span>
+                              <span className="truncate"><strong>Requester:</strong> {ticket.requester_name}</span>
+                              {/* Only show SLA if it has text (not for closed/resolved tickets) */}
+                              {slaStatus.text ? (
+                                <span className={`truncate ${slaStatus.color}`}>{slaStatus.text}</span>
+                              ) : (
+                                <span className="truncate text-gray-400">Completed</span>
+                              )}
+                              <div className="col-span-2 flex items-center gap-1 sm:gap-2">
+                                <strong className="whitespace-nowrap">Status:</strong>
+                                <span className={`px-2 py-0.5 rounded text-xs capitalize border flex-1 truncate ${statusColor(ticket.status)}`}>
+                                  {ticket.status.replace('_', ' ')}
                                 </span>
                               </div>
-                              <p className="text-sm text-gray-600 mb-4 line-clamp-2">{ticket.description}</p>
-                              <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm text-gray-500 border-t pt-4">
-                                <span><strong>ID:</strong> {ticket.id.slice(0, 8)}...</span>
-                                <span className="capitalize"><strong>Type:</strong> {ticket.type.replace('_', ' ')}</span>
-                                <span><strong>Requester:</strong> {ticket.requester_name}</span>
-                                <span><strong>Est. Time:</strong> {ticket.estimatedTime}</span>
-                                <div className="col-span-2 flex items-center">
-                                  <strong>Status:</strong>
-                                  <span className={`ml-2 px-2 py-0.5 rounded text-xs capitalize border ${statusColor(ticket.status)}`}>
-                                    {ticket.status.replace('_', ' ')}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="mt-4 pt-4 border-t flex gap-2">
-                              {ticket.status === 'open' && (
-                                <button 
-                                  onClick={() => handleTakeTicket(ticket.id)} 
-                                  className="flex-1 px-3 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md hover:bg-blue-700"
-                                >
-                                  Start Work
-                                </button>
-                              )}
-
-                              <button 
-                                onClick={() => openTicketDetails(ticket)} 
-                                className="flex-1 px-3 py-2 bg-gray-200 text-gray-800 text-sm font-semibold rounded-md hover:bg-gray-300"
-                              >
-                                Details
-                              </button>
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    )}
+                          <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t">
+                            <button 
+                              onClick={() => openTicketDetails(ticket)} 
+                              className="w-full px-3 py-2 bg-gray-200 text-gray-800 text-xs sm:text-sm font-semibold rounded-md hover:bg-gray-300 active:scale-95 transition-transform"
+                            >
+                              View Details
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                </div>
-              </>
-            )}
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Ticket Detail Modal */}
+      {/* Ticket Detail Modal - Mobile Improved */}
       {selectedTicket && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4" onClick={() => setSelectedTicket(null)}>
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="sticky top-0 bg-white border-b border-gray-200 p-4 flex justify-between items-center">
-              <h2 className="text-xl font-bold text-gray-900">{selectedTicket.title}</h2>
-              <button onClick={() => setSelectedTicket(null)} className="text-gray-500 hover:text-gray-800">
-                <X className="w-6 h-6" />
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-start sm:items-center justify-center z-50 p-2 sm:p-4" onClick={() => setSelectedTicket(null)}>
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] sm:max-h-[95vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white border-b border-gray-200 p-3 sm:p-4 flex justify-between items-center">
+              <h2 className="text-lg sm:text-xl font-bold text-gray-900 truncate pr-2">Ticket Details</h2>
+              <button 
+                onClick={() => setSelectedTicket(null)} 
+                className="text-gray-500 hover:text-gray-800 text-xl sm:text-2xl flex-shrink-0 w-8 h-8 flex items-center justify-center"
+              >
+                ×
               </button>
             </div>
             
-            <div className="p-6 space-y-6">
-              {/* Ticket Details */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+              {/* Ticket Details - Mobile Improved */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                    <AlertCircle className="w-5 h-5" />
+                  <h3 className="text-base sm:text-lg font-semibold text-gray-800 mb-2 sm:mb-3">
                     Ticket Details
                   </h3>
-                  <div className="space-y-3">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Status:</span>
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-semibold capitalize ${statusColor(selectedTicket.status)}`}>
+                  <div className="space-y-2 sm:space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 text-sm sm:text-base">Status:</span>
+                      <span className={`px-2 py-1 rounded-full text-xs font-semibold capitalize ${statusColor(selectedTicket.status)}`}>
                         {selectedTicket.status.replace('_', ' ')}
                       </span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Priority:</span>
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-semibold capitalize ${priorityColor(selectedTicket.priority)}`}>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 text-sm sm:text-base">Priority:</span>
+                      <span className={`px-2 py-1 rounded-full text-xs font-semibold capitalize ${priorityColor(selectedTicket.priority)}`}>
                         {selectedTicket.priority}
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Type:</span>
-                      <span className="font-medium capitalize">{selectedTicket.type.replace('_', ' ')}</span>
+                      <span className="text-gray-600 text-sm sm:text-base">Type:</span>
+                      <span className="font-medium capitalize text-sm sm:text-base">{selectedTicket.type.replace('_', ' ')}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Category:</span>
-                      <span className="font-medium capitalize">{selectedTicket.category}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Estimated Time:</span>
-                      <span className="font-medium">{selectedTicket.estimatedTime || 'Not specified'}</span>
+                      <span className="text-gray-600 text-sm sm:text-base">Category:</span>
+                      <span className="font-medium capitalize text-sm sm:text-base">{selectedTicket.category}</span>
                     </div>
                   </div>
                 </div>
 
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                    <User className="w-5 h-5" />
-                    People Involved
+                  <h3 className="text-base sm:text-lg font-semibold text-gray-800 mb-2 sm:mb-3">
+                    People & Timeline
                   </h3>
-                  <div className="space-y-3">
+                  <div className="space-y-2 sm:space-y-3">
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Requester:</span>
-                      <span className="font-medium">{selectedTicket.requester_name || 'Unknown'}</span>
+                      <span className="text-gray-600 text-sm sm:text-base">Requester:</span>
+                      <span className="font-medium text-sm sm:text-base truncate pl-2">{selectedTicket.requester_name || 'Unknown'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Assignee:</span>
-                      <span className="font-medium">{selectedTicket.assignee_name || 'Unassigned'}</span>
+                      <span className="text-gray-600 text-sm sm:text-base">Assignee:</span>
+                      <span className="font-medium text-sm sm:text-base truncate pl-2">{selectedTicket.assignee_name || 'Unassigned'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Created:</span>
-                      <span className="font-medium">{new Date(selectedTicket.created_at).toLocaleDateString()}</span>
+                      <span className="text-gray-600 text-sm sm:text-base">Created:</span>
+                      <span className="font-medium text-sm sm:text-base">{new Date(selectedTicket.created_at).toLocaleDateString()}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Last Updated:</span>
-                      <span className="font-medium">{new Date(selectedTicket.updated_at).toLocaleDateString()}</span>
+                      <span className="text-gray-600 text-sm sm:text-base">Last Updated:</span>
+                      <span className="font-medium text-sm sm:text-base">{new Date(selectedTicket.updated_at).toLocaleDateString()}</span>
                     </div>
-                    {selectedTicket.sla_deadline && (
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">SLA Deadline:</span>
-                        <span className="font-medium">{new Date(selectedTicket.sla_deadline).toLocaleDateString()}</span>
-                      </div>
+                    {/* Only show SLA for active tickets */}
+                    {selectedTicket.sla_deadline && selectedTicket.status !== 'closed' && selectedTicket.status !== 'resolved' && (
+                      <>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600 text-sm sm:text-base">SLA Deadline:</span>
+                          <span className="font-medium text-sm sm:text-base">{new Date(selectedTicket.sla_deadline).toLocaleDateString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600 text-sm sm:text-base">SLA Status:</span>
+                          <span className={`font-medium text-sm sm:text-base ${getSLAStatus(selectedTicket.sla_deadline, selectedTicket.status).color}`}>
+                            {getSLAStatus(selectedTicket.sla_deadline, selectedTicket.status).text}
+                          </span>
+                        </div>
+                      </>
                     )}
                   </div>
                 </div>
@@ -461,40 +402,39 @@ const TechnicianDashboard: React.FC<TechnicianDashboardProps> = ({ currentUser }
 
               {/* Description */}
               <div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-3">Description</h3>
-                <p className="text-gray-700 bg-gray-50 p-4 rounded-lg">{selectedTicket.description}</p>
+                <h3 className="text-base sm:text-lg font-semibold text-gray-800 mb-2 sm:mb-3">Description</h3>
+                <p className="text-gray-700 bg-gray-50 p-3 sm:p-4 rounded-lg text-sm sm:text-base">{selectedTicket.description}</p>
               </div>
 
               {/* Internal Comments */}
               <div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                  <MessageSquare className="w-5 h-5" />
+                <h3 className="text-base sm:text-lg font-semibold text-gray-800 mb-2 sm:mb-3">
                   Internal Comments
                 </h3>
                 {selectedTicket.internal_comments && selectedTicket.internal_comments.length > 0 ? (
-                  <div className="space-y-4">
+                  <div className="space-y-3 sm:space-y-4">
                     {selectedTicket.internal_comments.map(comment => (
-                      <div key={comment.id} className="bg-gray-50 p-4 rounded-lg">
-                        <div className="flex justify-between items-start mb-2">
-                          <span className="font-medium text-gray-800">{comment.technician_name}</span>
-                          <span className="text-sm text-gray-500">
+                      <div key={comment.id} className="bg-gray-50 p-3 sm:p-4 rounded-lg">
+                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-2 gap-1">
+                          <span className="font-medium text-gray-800 text-sm sm:text-base">{comment.technician_name}</span>
+                          <span className="text-xs sm:text-sm text-gray-500">
                             {new Date(comment.created_at).toLocaleDateString()} at {new Date(comment.created_at).toLocaleTimeString()}
                           </span>
                         </div>
-                        <p className="text-gray-700">{comment.comment}</p>
+                        <p className="text-gray-700 text-sm sm:text-base">{comment.comment}</p>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-gray-500 italic">No comments yet.</p>
+                  <p className="text-gray-500 italic text-sm sm:text-base">No comments yet.</p>
                 )}
               </div>
 
-              {/* Action Buttons */}
+              {/* Action Buttons - Mobile Improved */}
               <div className="flex gap-3 pt-4 border-t border-gray-200">
                 <button 
                   onClick={() => setSelectedTicket(null)} 
-                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
+                  className="flex-1 px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 active:scale-95 transition-transform text-sm sm:text-base"
                 >
                   Close
                 </button>

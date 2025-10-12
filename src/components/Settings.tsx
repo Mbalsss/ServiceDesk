@@ -1,24 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Settings as SettingsIcon, Ticket, User, Lock, Save, Bell, Palette, Edit, Mail, Loader } from 'lucide-react';
+import { Settings as SettingsIcon, User, Lock, Save, Bell, Loader, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-
-interface UserAccount {
-  id: string;
-  full_name: string;
-  email: string;
-  role: string;
-  department: string | null;
-  available: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-interface TicketField {
-  id: string;
-  name: string;
-  type: string;
-  created_at: string;
-}
 
 interface Preferences {
   email_notifications: boolean;
@@ -33,23 +15,24 @@ const Settings: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   
-  // Profile State (separated from password)
+  // Profile State
   const [profile, setProfile] = useState({
     full_name: '',
     email: '',
     department: '',
-    phone: '',
   });
 
-  // Password State (separated from profile)
+  // Password State
   const [password, setPassword] = useState({
     currentPassword: '',
     newPassword: '',
     confirmPassword: '',
   });
 
-  // User Management
-  const [users, setUsers] = useState<UserAccount[]>([]);
+  // Password visibility states
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Preferences
   const [preferences, setPreferences] = useState<Preferences>({
@@ -59,10 +42,12 @@ const Settings: React.FC = () => {
     announcements_email: false,
   });
 
-  // Ticket Fields
-  const [ticketFields, setTicketFields] = useState<TicketField[]>([]);
-  const [newFieldName, setNewFieldName] = useState('');
-  const [newFieldType, setNewFieldType] = useState('Text');
+  // Tabs array
+  const tabs = [
+    { id: 'profile', label: 'Profile', icon: User },
+    { id: 'password', label: 'Password', icon: Lock },
+    { id: 'preferences', label: 'Notifications', icon: Bell },
+  ];
 
   // Load data on component mount
   useEffect(() => {
@@ -74,9 +59,7 @@ const Settings: React.FC = () => {
     try {
       await Promise.all([
         fetchUserProfile(),
-        fetchUsers(),
         fetchPreferences(),
-        fetchTicketFields(),
       ]);
     } catch (error) {
       setError('Failed to load settings data');
@@ -106,24 +89,7 @@ const Settings: React.FC = () => {
         full_name: data.full_name || '',
         email: data.email || '',
         department: data.department || '',
-        phone: data.phone || '',
       });
-    }
-  };
-
-  const fetchUsers = async () => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .order('full_name', { ascending: true });
-
-    if (error) {
-      console.error('Error fetching users:', error);
-      return;
-    }
-
-    if (data) {
-      setUsers(data as UserAccount[]);
     }
   };
 
@@ -132,31 +98,18 @@ const Settings: React.FC = () => {
     if (!user) return;
 
     try {
-      // First get the profile ID for the current user
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', user.id)
-        .single();
-
-      if (profileError || !profileData) {
-        console.error('Error fetching profile:', profileError);
-        return;
-      }
-
-      // Now fetch notification settings using the profile ID
       const { data, error } = await supabase
-        .from('notification_settings')
+        .from('notifications')
         .select('email_enabled, in_app_enabled, ticket_updates_email, announcements_email')
-        .eq('user_id', profileData.id)
+        .eq('user_id', user.id)
         .maybeSingle();
 
       if (error) {
         console.log('Error fetching notification settings:', error);
         
-        // If no settings exist, create default ones
-        if (error.code === 'PGRST116') { // No rows found
-          await createDefaultNotificationSettings(profileData.id);
+        // Check if no records found (PGRST116 is the code for no rows returned)
+        if (error.code === 'PGRST116') {
+          await createDefaultNotificationSettings(user.id);
         }
         return;
       }
@@ -175,12 +128,12 @@ const Settings: React.FC = () => {
     }
   };
 
-  const createDefaultNotificationSettings = async (profileId: string) => {
+  const createDefaultNotificationSettings = async (userId: string) => {
     try {
       const { error } = await supabase
-        .from('notification_settings')
+        .from('notifications')
         .insert({
-          user_id: profileId,
+          user_id: userId,
           email_enabled: true,
           in_app_enabled: true,
           ticket_updates_email: true,
@@ -190,9 +143,6 @@ const Settings: React.FC = () => {
       if (error) {
         console.error('Error creating default notification settings:', error);
       } else {
-        console.log('Default notification settings created');
-        
-        // Set the default preferences in state
         setPreferences({
           email_notifications: true,
           notifications: true,
@@ -202,27 +152,6 @@ const Settings: React.FC = () => {
       }
     } catch (error) {
       console.error('Unexpected error creating default settings:', error);
-    }
-  };
-
-  const fetchTicketFields = async () => {
-    try {
-      // Mock data for ticket fields - in a real app, you'd fetch from a ticket_fields table
-      const mockFields: TicketField[] = [
-        { id: '1', name: 'Priority', type: 'Dropdown', created_at: new Date().toISOString() },
-        { id: '2', name: 'Category', type: 'Dropdown', created_at: new Date().toISOString() },
-        { id: '3', name: 'Due Date', type: 'Date', created_at: new Date().toISOString() },
-        { id: '4', name: 'Urgency', type: 'Dropdown', created_at: new Date().toISOString() },
-        { id: '5', name: 'Impact', type: 'Dropdown', created_at: new Date().toISOString() },
-      ];
-      setTicketFields(mockFields);
-    } catch (error) {
-      console.error('Error fetching ticket fields:', error);
-      // Set default fields if there's an error
-      setTicketFields([
-        { id: '1', name: 'Priority', type: 'Dropdown', created_at: new Date().toISOString() },
-        { id: '2', name: 'Category', type: 'Dropdown', created_at: new Date().toISOString() },
-      ]);
     }
   };
 
@@ -244,7 +173,6 @@ const Settings: React.FC = () => {
         .update({
           full_name: profile.full_name,
           department: profile.department,
-          phone: profile.phone,
           updated_at: new Date().toISOString(),
         })
         .eq('id', user.id);
@@ -252,21 +180,43 @@ const Settings: React.FC = () => {
       if (error) throw error;
 
       setSuccess('Profile updated successfully!');
+      setTimeout(() => setSuccess(null), 3000);
     } catch (error: any) {
       setError('Failed to update profile: ' + error.message);
+      setTimeout(() => setError(null), 5000);
     } finally {
       setLoading(false);
     }
   };
 
-  // Password functions
+  // Password functions - updated with current password verification
   const handlePasswordChange = (field: keyof typeof password, value: string) => {
     setPassword(prev => ({ ...prev, [field]: value }));
   };
 
   const handlePasswordSave = async () => {
+    // Validation
+    if (!password.currentPassword) {
+      setError('Please enter your current password');
+      setTimeout(() => setError(null), 5000);
+      return;
+    }
+
     if (password.newPassword !== password.confirmPassword) {
       setError('New passwords do not match!');
+      setTimeout(() => setError(null), 5000);
+      return;
+    }
+
+    if (!password.newPassword) {
+      setError('Please enter a new password');
+      setTimeout(() => setError(null), 5000);
+      return;
+    }
+
+    if (password.newPassword.length < 6) {
+      setError('Password must be at least 6 characters long');
+      setTimeout(() => setError(null), 5000);
       return;
     }
 
@@ -274,6 +224,21 @@ const Settings: React.FC = () => {
     setError(null);
     
     try {
+      // First, verify the current password by attempting to reauthenticate
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !user.email) throw new Error('User not authenticated');
+
+      // Reauthenticate with current password
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: password.currentPassword,
+      });
+
+      if (signInError) {
+        throw new Error('Current password is incorrect');
+      }
+
+      // If reauthentication successful, update the password
       const { error } = await supabase.auth.updateUser({
         password: password.newPassword
       });
@@ -281,132 +246,23 @@ const Settings: React.FC = () => {
       if (error) throw error;
 
       setSuccess('Password changed successfully!');
+      setTimeout(() => setSuccess(null), 3000);
+      
+      // Reset form
       setPassword({ 
         currentPassword: '', 
         newPassword: '', 
         confirmPassword: '' 
       });
+      
+      // Reset visibility states
+      setShowCurrentPassword(false);
+      setShowNewPassword(false);
+      setShowConfirmPassword(false);
+      
     } catch (error: any) {
       setError('Failed to change password: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // User Management functions
-  const updateUserRole = async (id: string, role: string) => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ 
-          role, 
-          updated_at: new Date().toISOString() 
-        })
-        .eq('id', id);
-
-      if (error) throw error;
-
-      setUsers(users.map(u => u.id === id ? { ...u, role } : u));
-      setSuccess('User role updated successfully!');
-    } catch (error: any) {
-      setError('Failed to update user role: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const toggleUserStatus = async (id: string, available: boolean) => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ 
-          available, 
-          updated_at: new Date().toISOString() 
-        })
-        .eq('id', id);
-
-      if (error) throw error;
-
-      setUsers(users.map(u => u.id === id ? { ...u, available } : u));
-      setSuccess('User status updated successfully!');
-    } catch (error: any) {
-      setError('Failed to update user status: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const updateUserDepartment = async (id: string, department: string) => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ 
-          department: department || null, 
-          updated_at: new Date().toISOString() 
-        })
-        .eq('id', id);
-
-      if (error) throw error;
-
-      setUsers(users.map(u => u.id === id ? { ...u, department } : u));
-      setSuccess('User department updated successfully!');
-    } catch (error: any) {
-      setError('Failed to update user department: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const removeUser = async (id: string) => {
-    if (!confirm('Are you sure you want to remove this user?')) return;
-
-    setLoading(true);
-    setError(null);
-    
-    try {
-      // First check if the user has any assigned tickets
-      const { data: tickets, error: ticketError } = await supabase
-        .from('tickets')
-        .select('id')
-        .or(`assignee_id.eq.${id},requester_id.eq.${id},closed_by.eq.${id}`);
-
-      if (ticketError) throw ticketError;
-      
-      if (tickets && tickets.length > 0) {
-        setError('Cannot remove user with assigned tickets. Please reassign tickets first.');
-        return;
-      }
-
-      // Check if user has any assigned equipment
-      const { data: equipment, error: equipmentError } = await supabase
-        .from('equipment')
-        .select('id')
-        .eq('assigned_to', id);
-
-      if (equipmentError) throw equipmentError;
-      
-      if (equipment && equipment.length > 0) {
-        setError('Cannot remove user with assigned equipment. Please reassign equipment first.');
-        return;
-      }
-
-      // Delete the user from auth (admin function)
-      const { error: deleteError } = await supabase.auth.admin.deleteUser(id);
-      if (deleteError) throw deleteError;
-
-      setUsers(users.filter(u => u.id !== id));
-      setSuccess('User removed successfully!');
-    } catch (error: any) {
-      setError('Failed to remove user: ' + error.message);
+      setTimeout(() => setError(null), 5000);
     } finally {
       setLoading(false);
     }
@@ -425,21 +281,10 @@ const Settings: React.FC = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
 
-      // Get the profile ID for the current user
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('id', user.id)
-        .single();
-
-      if (profileError || !profileData) {
-        throw new Error('Failed to fetch user profile');
-      }
-
       const { error } = await supabase
-        .from('notification_settings')
+        .from('notifications')
         .upsert({
-          user_id: profileData.id,
+          user_id: user.id,
           email_enabled: preferences.email_notifications,
           in_app_enabled: preferences.notifications,
           ticket_updates_email: preferences.ticket_updates_email,
@@ -451,76 +296,45 @@ const Settings: React.FC = () => {
 
       if (error) throw error;
 
-      setSuccess('Preferences saved successfully!');
+      setSuccess('Notification preferences saved successfully!');
+      setTimeout(() => setSuccess(null), 3000);
     } catch (error: any) {
       setError('Failed to save preferences: ' + error.message);
+      setTimeout(() => setError(null), 5000);
     } finally {
       setLoading(false);
     }
   };
 
-  // Ticket Field functions
-  const addTicketField = () => {
-    if (!newFieldName.trim()) {
-      setError('Please enter a field name');
-      return;
-    }
-
-    const newField: TicketField = {
-      id: Date.now().toString(),
-      name: newFieldName,
-      type: newFieldType,
-      created_at: new Date().toISOString()
-    };
-
-    setTicketFields([...ticketFields, newField]);
-    setNewFieldName('');
-    setSuccess('Ticket field added successfully!');
-  };
-
-  const removeTicketField = (id: string) => {
-    if (!confirm('Are you sure you want to delete this field?')) return;
-    
-    setTicketFields(ticketFields.filter(f => f.id !== id));
-    setSuccess('Field deleted successfully!');
-  };
-
-  const tabs = [
-    { id: 'profile', label: 'Profile & Account', icon: User },
-    { id: 'preferences', label: 'Preferences', icon: Palette },
-    { id: 'users', label: 'User Management', icon: User },
-    { id: 'fields', label: 'Ticket Fields', icon: Ticket },
-  ];
-
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-100 p-4 sm:p-6 flex items-center justify-center">
         <div className="text-center">
-          <Loader className="w-8 h-8 mx-auto mb-4 animate-spin text-blue-600" />
-          <p className="text-gray-600">Loading settings...</p>
+          <Loader className="w-8 h-8 mx-auto mb-4 animate-spin text-[#5483B3]" />
+          <p className="text-gray-600 text-sm sm:text-base">Loading settings...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-6xl mx-auto">
+    <div className="min-h-screen bg-gray-100 py-4 sm:py-6">
+      <div className="max-w-4xl mx-auto px-3 sm:px-4 lg:px-6">
         {/* Header */}
         <div className="flex items-center space-x-3 mb-6">
-          <SettingsIcon className="w-8 h-8 text-blue-600" />
-          <h1 className="text-3xl font-bold text-gray-900">Admin Settings</h1>
+          <SettingsIcon className="w-6 h-6 sm:w-8 sm:h-8 text-[#5483B3]" />
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">Settings</h1>
         </div>
 
         {/* Messages */}
         {error && (
-          <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded flex items-center">
-            <span>{error}</span>
+          <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm sm:text-base">
+            {error}
           </div>
         )}
         {success && (
-          <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded flex items-center">
-            <span>{success}</span>
+          <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded-lg text-sm sm:text-base">
+            {success}
           </div>
         )}
 
@@ -533,10 +347,10 @@ const Settings: React.FC = () => {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center space-x-2 px-6 py-4 font-medium text-sm border-b-2 transition-colors whitespace-nowrap ${
+                  className={`flex items-center space-x-2 px-4 sm:px-6 py-3 sm:py-4 font-medium text-sm border-b-2 transition-colors duration-200 whitespace-nowrap ${
                     activeTab === tab.id
-                      ? 'border-blue-600 text-blue-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                      ? 'border-[#5483B3] text-[#5483B3]'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   }`}
                 >
                   <IconComponent className="w-4 h-4" />
@@ -547,22 +361,23 @@ const Settings: React.FC = () => {
           </div>
 
           {/* Tab Content */}
-          <div className="p-6">
-            {/* Profile & Account Tab */}
+          <div className="p-4 sm:p-6">
+            {/* Profile Tab */}
             {activeTab === 'profile' && (
-              <div className="space-y-8">
+              <div className="space-y-4 sm:space-y-6">
                 <div>
-                  <h2 className="text-xl font-semibold mb-4">Profile Information</h2>
-                  <p className="text-gray-600 mb-6">Update your personal information.</p>
+                  <h2 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4">Profile Information</h2>
+                  <p className="text-gray-600 mb-4 sm:mb-6 text-sm sm:text-base">Update your personal information.</p>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
                       <input
                         type="text"
                         value={profile.full_name}
                         onChange={e => handleProfileChange('full_name', e.target.value)}
-                        className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full border border-gray-300 rounded-lg px-3 sm:px-4 py-2 text-sm sm:text-base focus:ring-2 focus:ring-[#5483B3] focus:border-[#5483B3] transition-colors duration-200"
+                        placeholder="Enter your full name"
                       />
                     </div>
                     <div>
@@ -571,28 +386,18 @@ const Settings: React.FC = () => {
                         type="email"
                         value={profile.email}
                         disabled
-                        className="w-full border border-gray-300 rounded-lg px-4 py-2 bg-gray-100 cursor-not-allowed"
+                        className="w-full border border-gray-300 rounded-lg px-3 sm:px-4 py-2 bg-gray-50 cursor-not-allowed text-sm sm:text-base"
                       />
                       <p className="text-xs text-gray-500 mt-1">Email cannot be changed</p>
                     </div>
-                    <div>
+                    <div className="md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
                       <input
                         type="text"
                         value={profile.department}
                         onChange={e => handleProfileChange('department', e.target.value)}
-                        className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Enter department"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
-                      <input
-                        type="tel"
-                        value={profile.phone}
-                        onChange={e => handleProfileChange('phone', e.target.value)}
-                        className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Enter phone number"
+                        className="w-full md:w-1/2 border border-gray-300 rounded-lg px-3 sm:px-4 py-2 text-sm sm:text-base focus:ring-2 focus:ring-[#5483B3] focus:border-[#5483B3] transition-colors duration-200"
+                        placeholder="Enter your department"
                       />
                     </div>
                   </div>
@@ -600,54 +405,90 @@ const Settings: React.FC = () => {
                   <button
                     onClick={handleProfileSave}
                     disabled={loading}
-                    className="mt-6 bg-blue-600 text-white px-6 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-colors disabled:opacity-50"
+                    className="mt-4 sm:mt-6 bg-[#5483B3] text-white px-4 sm:px-6 py-2 rounded-lg flex items-center justify-center space-x-2 hover:bg-[#476a8a] transition-colors duration-200 disabled:opacity-50 text-sm sm:text-base w-full sm:w-auto"
                   >
                     {loading ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                     <span>Save Profile</span>
                   </button>
                 </div>
+              </div>
+            )}
 
-                {/* Change Password Section */}
-                <div className="border-t pt-8">
-                  <h2 className="text-xl font-semibold mb-4">Change Password</h2>
-                  <p className="text-gray-600 mb-6">Update your password to keep your account secure.</p>
+            {/* Password Tab */}
+            {activeTab === 'password' && (
+              <div className="space-y-4 sm:space-y-6">
+                <div>
+                  <h2 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4">Change Password</h2>
+                  <p className="text-gray-600 mb-4 sm:mb-6 text-sm sm:text-base">Update your password to keep your account secure.</p>
                   
-                  <div className="max-w-md space-y-4">
+                  <div className="max-w-md space-y-3 sm:space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
-                      <input
-                        type="password"
-                        value={password.currentPassword}
-                        onChange={e => handlePasswordChange('currentPassword', e.target.value)}
-                        className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Enter current password"
-                      />
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Current Password
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showCurrentPassword ? "text" : "password"}
+                          value={password.currentPassword}
+                          onChange={e => handlePasswordChange('currentPassword', e.target.value)}
+                          className="w-full border border-gray-300 rounded-lg px-3 sm:px-4 py-2 pr-10 text-sm sm:text-base focus:ring-2 focus:ring-[#5483B3] focus:border-[#5483B3] transition-colors duration-200"
+                          placeholder="Enter current password"
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors duration-200"
+                        >
+                          {showCurrentPassword ? <EyeOff className="w-4 h-4 sm:w-5 sm:h-5" /> : <Eye className="w-4 h-4 sm:w-5 sm:h-5" />}
+                        </button>
+                      </div>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
-                      <input
-                        type="password"
-                        value={password.newPassword}
-                        onChange={e => handlePasswordChange('newPassword', e.target.value)}
-                        className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Enter new password"
-                      />
+                      <div className="relative">
+                        <input
+                          type={showNewPassword ? "text" : "password"}
+                          value={password.newPassword}
+                          onChange={e => handlePasswordChange('newPassword', e.target.value)}
+                          className="w-full border border-gray-300 rounded-lg px-3 sm:px-4 py-2 pr-10 text-sm sm:text-base focus:ring-2 focus:ring-[#5483B3] focus:border-[#5483B3] transition-colors duration-200"
+                          placeholder="Enter new password (min. 6 characters)"
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowNewPassword(!showNewPassword)}
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors duration-200"
+                        >
+                          {showNewPassword ? <EyeOff className="w-4 h-4 sm:w-5 sm:h-5" /> : <Eye className="w-4 h-4 sm:w-5 sm:h-5" />}
+                        </button>
+                      </div>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Confirm New Password</label>
-                      <input
-                        type="password"
-                        value={password.confirmPassword}
-                        onChange={e => handlePasswordChange('confirmPassword', e.target.value)}
-                        className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="Confirm new password"
-                      />
+                      <div className="relative">
+                        <input
+                          type={showConfirmPassword ? "text" : "password"}
+                          value={password.confirmPassword}
+                          onChange={e => handlePasswordChange('confirmPassword', e.target.value)}
+                          className="w-full border border-gray-300 rounded-lg px-3 sm:px-4 py-2 pr-10 text-sm sm:text-base focus:ring-2 focus:ring-[#5483B3] focus:border-[#5483B3] transition-colors duration-200"
+                          placeholder="Confirm new password"
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors duration-200"
+                        >
+                          {showConfirmPassword ? <EyeOff className="w-4 h-4 sm:w-5 sm:h-5" /> : <Eye className="w-4 h-4 sm:w-5 sm:h-5" />}
+                        </button>
+                      </div>
                     </div>
                     
                     <button
                       onClick={handlePasswordSave}
-                      disabled={loading || !password.newPassword || !password.confirmPassword}
-                      className="bg-blue-600 text-white px-6 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-colors disabled:opacity-50"
+                      disabled={loading || !password.currentPassword || !password.newPassword || !password.confirmPassword}
+                      className="bg-[#5483B3] text-white px-4 sm:px-6 py-2 rounded-lg flex items-center justify-center space-x-2 hover:bg-[#476a8a] transition-colors duration-200 disabled:opacity-50 mt-3 sm:mt-4 text-sm sm:text-base w-full"
                     >
                       {loading ? <Loader className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
                       <span>Change Password</span>
@@ -657,23 +498,23 @@ const Settings: React.FC = () => {
               </div>
             )}
 
-            {/* Preferences Tab */}
+            {/* Notifications Tab */}
             {activeTab === 'preferences' && (
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6">
                 <div>
-                  <h2 className="text-xl font-semibold mb-4">Notification Preferences</h2>
-                  <p className="text-gray-600 mb-6">Customize how you receive notifications.</p>
+                  <h2 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4">Notification Preferences</h2>
+                  <p className="text-gray-600 mb-4 sm:mb-6 text-sm sm:text-base">Customize how you receive notifications.</p>
                   
-                  <div className="bg-white border border-gray-200 rounded-lg p-4">
-                    <h3 className="font-medium mb-4 flex items-center">
-                      <Bell className="w-5 h-5 mr-2 text-blue-600" />
-                      Notifications
+                  <div className="bg-white border border-gray-200 rounded-lg p-4 sm:p-6">
+                    <h3 className="font-medium mb-3 sm:mb-4 flex items-center text-sm sm:text-base">
+                      <Bell className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-[#5483B3]" />
+                      Notification Settings
                     </h3>
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div>
+                    <div className="space-y-4 sm:space-y-6">
+                      <div className="flex items-center justify-between p-3 sm:p-4 bg-gray-50 rounded-lg">
+                        <div className="flex-1">
                           <label className="block text-sm font-medium text-gray-700 mb-1">Email Notifications</label>
-                          <p className="text-xs text-gray-500">Receive email alerts</p>
+                          <p className="text-xs text-gray-500">Receive email alerts for important updates</p>
                         </div>
                         <label className="relative inline-flex items-center cursor-pointer">
                           <input
@@ -682,12 +523,12 @@ const Settings: React.FC = () => {
                             onChange={e => handlePreferenceChange('email_notifications', e.target.checked)}
                             className="sr-only peer"
                           />
-                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                          <div className="w-10 h-5 sm:w-11 sm:h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 sm:after:h-5 sm:after:w-5 after:transition-all peer-checked:bg-[#5483B3]"></div>
                         </label>
                       </div>
                       
-                      <div className="flex items-center justify-between">
-                        <div>
+                      <div className="flex items-center justify-between p-3 sm:p-4 bg-gray-50 rounded-lg">
+                        <div className="flex-1">
                           <label className="block text-sm font-medium text-gray-700 mb-1">In-App Notifications</label>
                           <p className="text-xs text-gray-500">Browser and in-app notifications</p>
                         </div>
@@ -698,14 +539,14 @@ const Settings: React.FC = () => {
                             onChange={e => handlePreferenceChange('notifications', e.target.checked)}
                             className="sr-only peer"
                           />
-                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                          <div className="w-10 h-5 sm:w-11 sm:h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 sm:after:h-5 sm:after:w-5 after:transition-all peer-checked:bg-[#5483B3]"></div>
                         </label>
                       </div>
 
-                      <div className="flex items-center justify-between">
-                        <div>
+                      <div className="flex items-center justify-between p-3 sm:p-4 bg-gray-50 rounded-lg">
+                        <div className="flex-1">
                           <label className="block text-sm font-medium text-gray-700 mb-1">Ticket Updates Email</label>
-                          <p className="text-xs text-gray-500">Receive emails about ticket updates</p>
+                          <p className="text-xs text-gray-500">Receive emails about ticket status changes</p>
                         </div>
                         <label className="relative inline-flex items-center cursor-pointer">
                           <input
@@ -714,14 +555,14 @@ const Settings: React.FC = () => {
                             onChange={e => handlePreferenceChange('ticket_updates_email', e.target.checked)}
                             className="sr-only peer"
                           />
-                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                          <div className="w-10 h-5 sm:w-11 sm:h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 sm:after:h-5 sm:after:w-5 after:transition-all peer-checked:bg-[#5483B3]"></div>
                         </label>
                       </div>
 
-                      <div className="flex items-center justify-between">
-                        <div>
+                      <div className="flex items-center justify-between p-3 sm:p-4 bg-gray-50 rounded-lg">
+                        <div className="flex-1">
                           <label className="block text-sm font-medium text-gray-700 mb-1">Announcements Email</label>
-                          <p className="text-xs text-gray-500">Receive announcement emails</p>
+                          <p className="text-xs text-gray-500">Receive system-wide announcement emails</p>
                         </div>
                         <label className="relative inline-flex items-center cursor-pointer">
                           <input
@@ -730,185 +571,21 @@ const Settings: React.FC = () => {
                             onChange={e => handlePreferenceChange('announcements_email', e.target.checked)}
                             className="sr-only peer"
                           />
-                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                          <div className="w-10 h-5 sm:w-11 sm:h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 sm:after:h-5 sm:after:w-5 after:transition-all peer-checked:bg-[#5483B3]"></div>
                         </label>
                       </div>
                     </div>
                   </div>
                   
-                  <div className="mt-6 flex justify-end">
+                  <div className="mt-4 sm:mt-6 flex justify-end">
                     <button
                       onClick={savePreferences}
                       disabled={loading}
-                      className="bg-blue-600 text-white px-6 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-colors disabled:opacity-50"
+                      className="bg-[#5483B3] text-white px-4 sm:px-6 py-2 rounded-lg flex items-center justify-center space-x-2 hover:bg-[#476a8a] transition-colors duration-200 disabled:opacity-50 text-sm sm:text-base w-full sm:w-auto"
                     >
                       {loading ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                      <span>Save Preferences</span>
+                      <span>Save Notification Preferences</span>
                     </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* User Management Tab */}
-            {activeTab === 'users' && (
-              <div className="space-y-6">
-                <div>
-                  <h2 className="text-xl font-semibold mb-4">User Management</h2>
-                  <p className="text-gray-600 mb-4">Manage all system users and their access levels.</p>
-                  
-                  <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                    <table className="w-full">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {users.map(user => (
-                          <tr key={user.id}>
-                            <td className="px-4 py-3">
-                              <div>
-                                <div className="font-medium text-gray-900">{user.full_name}</div>
-                                <div className="text-sm text-gray-600">{user.email}</div>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <select 
-                                value={user.role} 
-                                onChange={e => updateUserRole(user.id, e.target.value)} 
-                                className="border rounded px-2 py-1 text-sm"
-                                disabled={loading}
-                              >
-                                <option value="admin">Administrator</option>
-                                <option value="technician">Technician</option>
-                                <option value="user">User</option>
-                              </select>
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className={`px-2 py-1 text-xs rounded-full ${
-                                user.available 
-                                  ? 'bg-green-100 text-green-800' 
-                                  : 'bg-gray-100 text-gray-800'
-                              }`}>
-                                {user.available ? 'Active' : 'Inactive'}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3">
-                              <input
-                                type="text"
-                                value={user.department || ''}
-                                onChange={e => updateUserDepartment(user.id, e.target.value)}
-                                className="border rounded px-2 py-1 text-sm w-32"
-                                placeholder="Department"
-                                disabled={loading}
-                              />
-                            </td>
-                            <td className="px-4 py-3 flex space-x-2">
-                              <button
-                                onClick={() => toggleUserStatus(user.id, !user.available)}
-                                disabled={loading}
-                                className={`text-xs px-3 py-1 rounded ${
-                                  user.available 
-                                    ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' 
-                                    : 'bg-green-100 text-green-700 hover:bg-green-200'
-                                } disabled:opacity-50`}
-                              >
-                                {user.available ? 'Deactivate' : 'Activate'}
-                              </button>
-                              <button
-                                onClick={() => removeUser(user.id)}
-                                disabled={loading}
-                                className="text-red-600 hover:text-red-800 p-1 transition-colors disabled:opacity-50"
-                                title="Delete user"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </td>
-                            </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Ticket Fields Tab */}
-            {activeTab === 'fields' && (
-              <div className="space-y-6">
-                <div>
-                  <h2 className="text-xl font-semibold mb-4">Ticket Fields</h2>
-                  <p className="text-gray-600 mb-4">Manage custom fields for tickets.</p>
-                  
-                  <div className="bg-gray-50 p-4 rounded-lg mb-6">
-                    <h3 className="font-medium mb-3">Add New Field</h3>
-                    <div className="flex flex-col sm:flex-row gap-3">
-                      <input
-                        type="text"
-                        placeholder="Field Name"
-                        value={newFieldName}
-                        onChange={e => setNewFieldName(e.target.value)}
-                        className="border border-gray-300 px-3 py-2 rounded flex-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                      <select
-                        value={newFieldType}
-                        onChange={e => setNewFieldType(e.target.value)}
-                        className="border border-gray-300 px-3 py-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="Text">Text</option>
-                        <option value="Dropdown">Dropdown</option>
-                        <option value="Date">Date</option>
-                        <option value="Number">Number</option>
-                        <option value="Checkbox">Checkbox</option>
-                        <option value="Textarea">Textarea</option>
-                      </select>
-                      <button
-                        onClick={addTicketField}
-                        disabled={!newFieldName.trim()}
-                        className="bg-blue-600 text-white px-4 py-2 rounded flex items-center space-x-2 hover:bg-blue-700 transition-colors disabled:opacity-50"
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span>Add Field</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="font-medium mb-3">Existing Fields</h3>
-                    {ticketFields.length === 0 ? (
-                      <div className="text-center py-8 text-gray-500">
-                        <Ticket className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                        <p>No custom fields created yet.</p>
-                      </div>
-                    ) : (
-                      <div className="grid gap-2">
-                        {ticketFields.map(field => (
-                          <div key={field.id} className="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-lg">
-                            <div className="flex-1">
-                              <div className="font-medium text-gray-900">{field.name}</div>
-                              <div className="text-sm text-gray-600">Type: {field.type}</div>
-                              {field.created_at && (
-                                <div className="text-xs text-gray-500 mt-1">
-                                  Created: {new Date(field.created_at).toLocaleDateString()}
-                                </div>
-                              )}
-                            </div>
-                            <button
-                              onClick={() => removeTicketField(field.id)}
-                              className="text-red-600 hover:text-red-800 p-2 transition-colors"
-                              title="Delete field"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>

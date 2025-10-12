@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { MessageSquare, Eye, EyeOff, AlertCircle, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { authService } from '../services/authService';
+import Logo from '../assets/Logo.png';
 
 interface LoginProps {
   onLogin: (user: { id: string; name: string; email: string; role: 'admin' | 'user' | 'technician'; department?: string }) => void;
@@ -69,17 +70,23 @@ const Login: React.FC<LoginProps> = ({ onLogin, onSwitchToSignup }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-blue-100 px-6 py-12">
+    <div 
+      className="min-h-screen flex items-center justify-center px-6 py-12"
+      style={{
+        background: 'linear-gradient(135deg, #F0F5FC 0%, #E8F0FA 100%)'
+      }}
+    >
       <motion.div
         initial={{ opacity: 0, y: 40 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8 space-y-6"
+        className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8 space-y-6 border border-gray-100"
       >
         {/* Logo */}
         <div className="flex justify-center">
-          <div className="w-14 h-14 bg-blue-600 rounded-xl flex items-center justify-center shadow-md">
-            <MessageSquare className="w-7 h-7 text-white" />
+          <div className="flex items-center space-x-3">
+            <img src={Logo} alt="Hapo Desk Logo" className="w-12 h-12 drop-shadow-lg" />
+            <span className="text-2xl font-bold text-gray-900">Hapo Desk</span>
           </div>
         </div>
 
@@ -101,7 +108,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onSwitchToSignup }) => {
                     type="button"
                     onClick={handleResendConfirmation}
                     disabled={resendLoading}
-                    className="ml-2 text-blue-700 underline hover:text-blue-800 disabled:opacity-50"
+                    className="ml-2 text-[#5483B3] underline hover:text-[#3A5C80] disabled:opacity-50"
                   >
                     {resendLoading ? 'Sending...' : 'Resend confirmation email'}
                   </button>
@@ -139,7 +146,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onSwitchToSignup }) => {
               value={formData.email}
               onChange={handleChange}
               placeholder="you@example.com"
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-[#5483B3] focus:border-[#5483B3] sm:text-sm transition-colors duration-200"
             />
           </div>
 
@@ -157,17 +164,17 @@ const Login: React.FC<LoginProps> = ({ onLogin, onSwitchToSignup }) => {
                 value={formData.password}
                 onChange={handleChange}
                 placeholder="Enter your password"
-                className="block w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                className="block w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg shadow-sm focus:ring-[#5483B3] focus:border-[#5483B3] sm:text-sm transition-colors duration-200"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-[#5483B3] transition-colors duration-200"
               >
                 {showPassword ? (
-                  <EyeOff className="h-5 w-5 text-gray-400" />
+                  <EyeOff className="h-5 w-5" />
                 ) : (
-                  <Eye className="h-5 w-5 text-gray-400" />
+                  <Eye className="h-5 w-5" />
                 )}
               </button>
             </div>
@@ -177,7 +184,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onSwitchToSignup }) => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full flex justify-center items-center py-2 px-4 rounded-lg text-white bg-blue-600 hover:bg-blue-700 font-medium transition-all duration-200 shadow-md disabled:opacity-50"
+            className="w-full flex justify-center items-center py-3 px-4 rounded-lg text-white bg-[#5483B3] hover:bg-[#3A5C80] font-medium transition-all duration-200 shadow-md disabled:opacity-50 hover:shadow-lg transform hover:scale-105"
           >
             {loading ? (
               <>
@@ -192,10 +199,10 @@ const Login: React.FC<LoginProps> = ({ onLogin, onSwitchToSignup }) => {
 
         {/* Switch to Sign Up */}
         <p className="text-center text-sm text-gray-600">
-          Don’t have an account?{' '}
+          Don't have an account?{' '}
           <button
             onClick={onSwitchToSignup}
-            className="text-blue-600 hover:text-blue-500 font-medium"
+            className="text-[#5483B3] hover:text-[#3A5C80] font-medium transition-colors duration-200"
           >
             Sign up
           </button>

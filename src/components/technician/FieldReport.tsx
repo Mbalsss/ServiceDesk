@@ -1,18 +1,26 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, FileText, Download, Printer, Eye } from 'lucide-react';
+import { FileText, Download, Printer, Eye, Plus } from 'lucide-react';
 
 interface FieldReportProps {
   currentUser: { id: string; name: string; email: string; role: string } | null;
 }
 
+interface Equipment {
+  id: string;
+  name: string;
+  category: string;
+  serial_number: string;
+  status: string;
+}
+
 interface Report {
   id: string;
-  technician: string;
+  technician_name: string;
   report_type: string;
   description: string;
-  date: string;
+  report_date: string;
   equipment: string;
   serial_number: string;
   work_hours: number;
@@ -37,19 +45,6 @@ const reportTypeOptions = [
   { id: 'repair', label: 'Repair', icon: '🔍' }
 ];
 
-const equipmentOptions = [
-  'Network Router',
-  'Switch',
-  'Server',
-  'Workstation',
-  'Printer',
-  'Security Camera',
-  'Access Control System',
-  'Telephone System',
-  'LED Screen System',
-  'Digital Signage'
-];
-
 const slaOptions = [
   'Standard',
   'Premium',
@@ -61,7 +56,6 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
   const location = useLocation();
   const navigate = useNavigate();
   
-  // Add null check for currentUser
   if (!currentUser) {
     return (
       <div className="max-w-6xl mx-auto p-6">
@@ -72,11 +66,10 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
     );
   }
 
-  // Use the current user's name as the technician
   const [selectedTech] = useState(currentUser.name);
   const [reportType, setReportType] = useState('installation');
   const [description, setDescription] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [report_date, setReportDate] = useState(new Date().toISOString().split('T')[0]);
   const [image, setImage] = useState<File | null>(null);
   const [equipment, setEquipment] = useState('');
   const [serialNumber, setSerialNumber] = useState('');
@@ -101,6 +94,15 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
   const [availableTickets, setAvailableTickets] = useState<any[]>([]);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
+  
+  // Equipment integration
+  const [availableEquipment, setAvailableEquipment] = useState<Equipment[]>([]);
+  const [showEquipmentModal, setShowEquipmentModal] = useState(false);
+  const [newEquipment, setNewEquipment] = useState({
+    name: '',
+    category: '',
+    serial_number: ''
+  });
 
   // Handle preset values from navigation
   useEffect(() => {
@@ -118,39 +120,34 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
       if (presetSiteLocation) setSiteLocation(presetSiteLocation);
       if (presetDescription) setDescription(presetDescription);
       
-      // Set the report type to "repair" if coming from "Cannot Resolve"
       if (presetDescription && presetDescription.includes("Cannot resolve")) {
         setReportType('repair');
       }
     }
   }, [location.state]);
 
-  // Helper function for date formatting, robust to undefined/null and invalid date strings
-  const formatDisplayDate = (dateString: string | undefined | null) => {
-    if (!dateString) {
-      return "N/A";
-    }
-    try {
-      const date = new Date(dateString);
-      if (isNaN(date.getTime())) {
-        return "Invalid Date";
-      }
-      return date.toLocaleDateString(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      });
-    } catch (e) {
-      console.error("Error formatting date in FieldReport:", dateString, e);
-      return "Error Date";
-    }
-  };
-  
-  // Fetch existing reports and available tickets on component mount
+  // Fetch existing reports, available tickets, and equipment
   useEffect(() => {
     fetchReports();
     fetchAvailableTickets();
+    fetchAvailableEquipment();
   }, []);
+
+  const fetchAvailableEquipment = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('equipment')
+        .select('*')
+        .eq('status', 'active')
+        .order('name');
+      
+      if (!error && data) {
+        setAvailableEquipment(data);
+      }
+    } catch (error) {
+      console.error('Error fetching equipment:', error);
+    }
+  };
 
   const fetchAvailableTickets = async () => {
     try {
@@ -174,7 +171,8 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
         .from('field_reports')
         .select(`
           *,
-          ticket:tickets(ticket_number, title, status)
+          ticket:tickets(ticket_number, title, status),
+          equipment_data:equipment(name, category, serial_number)
         `)
         .order('created_at', { ascending: false })
         .limit(10);
@@ -184,17 +182,45 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
         return;
       }
       
-      // Transform data to include ticket info
+      // Transform data to include ticket and equipment info
       const transformedData = data.map((report: any) => ({
         ...report,
         ticket_number: report.ticket?.ticket_number,
-        ticket_title: report.ticket?.title
+        ticket_title: report.ticket?.title,
+        equipment_name: report.equipment_data?.name,
+        equipment_category: report.equipment_data?.category
       }));
       
       setReports(transformedData || []);
       setError(null);
     } catch (err: any) {
       setError(`Error fetching reports: ${err.message}`);
+    }
+  };
+
+  const handleAddEquipment = async () => {
+    if (!newEquipment.name) {
+      alert('Equipment name is required');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('equipment')
+        .insert([{
+          name: newEquipment.name,
+          category: newEquipment.category,
+          serial_number: newEquipment.serial_number,
+          status: 'active'
+        }]);
+
+      if (error) throw error;
+
+      await fetchAvailableEquipment();
+      setNewEquipment({ name: '', category: '', serial_number: '' });
+      setShowEquipmentModal(false);
+    } catch (err: any) {
+      alert(`Error adding equipment: ${err.message}`);
     }
   };
 
@@ -248,17 +274,20 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
       // Get ticket number if ticket is selected
       const selectedTicketData = availableTickets.find(t => t.id === selectedTicket);
       
+      // Get equipment data
+      const selectedEquipmentData = availableEquipment.find(eq => eq.id === equipment);
+      
       // Insert report data
       const { data, error: insertError } = await supabase
         .from('field_reports')
         .insert([
           {
-            technician: selectedTech,
+            technician_name: selectedTech,
             report_type: reportType,
             description,
-            date,
+            report_date,
             equipment,
-            serial_number: serialNumber,
+            serial_number: selectedEquipmentData?.serial_number || serialNumber,
             work_hours: workHours ? parseFloat(workHours) : null,
             parts_used: partsUsed,
             customer_name: customerName,
@@ -318,7 +347,6 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
-    // Set up drawing styles
     ctx.strokeStyle = '#000';
     ctx.lineWidth = 2;
     ctx.lineCap = 'round';
@@ -380,8 +408,20 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
     setShowReportModal(true);
   };
 
+  const formatDisplayDate = (dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      });
+    } catch (e) {
+      return "Invalid Date";
+    }
+  };
+
   const downloadReport = (report: Report) => {
-    // Create a printable version of the report
     const printContent = `
       <html>
         <head>
@@ -398,7 +438,7 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
         <body>
           <div class="header">
             <h1>Field Service Report</h1>
-            <p>Date: ${formatDisplayDate(report.date)}</p>
+            <p>Date: ${formatDisplayDate(report.report_date)}</p>
           </div>
           
           <div class="section">
@@ -410,7 +450,7 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
             <div class="label">Service Details</div>
             <div>Type: ${report.report_type}</div>
             <div>SLA: ${report.sla_type || 'N/A'}</div>
-            <div>Equipment: ${report.equipment || 'N/A'}</div>
+            <div>Equipment: ${report.equipment_name || report.equipment || 'N/A'}</div>
             <div>Serial Number: ${report.serial_number || 'N/A'}</div>
           </div>
           
@@ -422,14 +462,14 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
           <div class="section">
             <div class="label">Time & Materials</div>
             <div>Work Hours: ${report.work_hours || 'N/A'}</div>
-            <div>Parts Used: ${report.parts_used || 'N/A'}</div>
+            <div>Parts Used: ${report.parts_used || 'N/A'}}</div>
             <div>Spares Used: ${report.spares_used || 'N/A'}</div>
             <div>Spares Left: ${report.spares_left || 'N/A'}</div>
           </div>
           
           <div class="section">
             <div class="label">Technician</div>
-            <div>${report.technician}</div>
+            <div>${report.technician_name}</div>
           </div>
           
           <div class="section">
@@ -454,35 +494,17 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
 
   return (
     <div className="max-w-6xl mx-auto p-6">
-      {/* Header Section with Back Button */}
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center">
-          <button 
-            onClick={() => navigate(-1)}
-            className="mr-4 p-2 rounded-lg hover:bg-gray-100 transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800">Field Service Report</h1>
-            <p className="text-gray-600">Complete and submit detailed service reports for client documentation</p>
-          </div>
-        </div>
-        
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={() => setActiveTab('reports')}
-            className="flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-          >
-            <Eye className="w-4 h-4 mr-2" />
-            View Reports
-          </button>
+      {/* Header Section */}
+      <div className="mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-black">Field Service Report</h1>
+          <p className="text-black">Complete and submit detailed service reports for client documentation</p>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-200">
+      <div className="bg-white rounded-xl shadow-md overflow-hidden border border-[#7BA4D0]">
         {error && (
-          <div className="bg-red-50 text-red-700 p-4 border-b border-red-100 flex items-center">
+          <div className="bg-[#F0F5FC] text-[#D0857B] p-4 border-b border-[#D0857B] flex items-center">
             <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
             </svg>
@@ -491,26 +513,22 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
         )}
         
         {/* Tab Navigation */}
-        <div className="flex border-b border-gray-200">
+        <div className="flex border-b border-[#7BA4D0]">
           <button
-            className={`px-6 py-3 font-medium text-sm ${activeTab === 'form' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+            className={`px-6 py-3 font-medium text-sm ${activeTab === 'form' ? 'text-[#5483B3] border-b-2 border-[#5483B3]' : 'text-black hover:text-[#5483B3]'}`}
             onClick={() => setActiveTab('form')}
           >
             <span className="flex items-center">
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
+              <FileText className="w-4 h-4 mr-2" />
               New Report
             </span>
           </button>
           <button
-            className={`px-6 py-3 font-medium text-sm ${activeTab === 'reports' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+            className={`px-6 py-3 font-medium text-sm ${activeTab === 'reports' ? 'text-[#5483B3] border-b-2 border-[#5483B3]' : 'text-black hover:text-[#5483B3]'}`}
             onClick={() => setActiveTab('reports')}
           >
             <span className="flex items-center">
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
+              <Eye className="w-4 h-4 mr-2" />
               Recent Reports
             </span>
           </button>
@@ -520,7 +538,7 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
           {activeTab === 'form' ? (
             <div>
               {isSubmitted && (
-                <div className="bg-green-50 text-green-700 p-4 rounded-lg mb-6 text-sm flex items-center">
+                <div className="bg-[#F0F5FC] text-[#5AB8A8] p-4 rounded-lg mb-6 text-sm flex items-center">
                   <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                   </svg>
@@ -529,8 +547,8 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
               )}
               
               {/* Ticket Linking Section */}
-              <div className="bg-blue-50 p-4 rounded-lg mb-6 border border-blue-200">
-                <label className="block text-sm font-medium mb-2 text-blue-800 flex items-center">
+              <div className="bg-[#F0F5FC] p-4 rounded-lg mb-6 border border-[#7BA4D0]">
+                <label className="block text-sm font-medium mb-2 text-black flex items-center">
                   <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 101.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l1.5-1.5a2 2 0 11-2.828-2.828l3-3z" clipRule="evenodd" />
                   </svg>
@@ -539,7 +557,7 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
                 <select
                   value={selectedTicket}
                   onChange={(e) => setSelectedTicket(e.target.value)}
-                  className="w-full border border-blue-300 p-3 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm bg-white"
+                  className="w-full border border-[#7BA4D0] p-3 rounded-md focus:ring-2 focus:ring-[#5483B3] focus:border-[#5483B3] outline-none transition text-sm bg-white text-black"
                 >
                   <option value="">Select a service ticket to link</option>
                   {availableTickets.map((ticket) => (
@@ -549,7 +567,7 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
                   ))}
                 </select>
                 {selectedTicket && (
-                  <p className="text-xs text-blue-600 mt-2 flex items-center">
+                  <p className="text-xs text-black mt-2 flex items-center">
                     <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
@@ -564,7 +582,7 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
                   <div className="space-y-6">
                     {/* Report Type Selection */}
                     <div>
-                      <label className="block text-sm font-medium mb-3 text-gray-700">Report Type</label>
+                      <label className="block text-sm font-medium mb-3 text-black">Report Type</label>
                       <div className="flex gap-3">
                         {reportTypeOptions.map((type) => (
                           <button
@@ -573,8 +591,8 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
                             onClick={() => setReportType(type.id)}
                             className={`flex-1 flex flex-col items-center justify-center p-3 rounded-lg text-sm font-medium transition-all ${
                               reportType === type.id 
-                                ? 'bg-blue-100 text-blue-700 border-2 border-blue-300 shadow-sm' 
-                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border-2 border-gray-200'
+                                ? 'bg-[#5483B3] text-white border-2 border-[#5483B3] shadow-sm' 
+                                : 'bg-[#F0F5FC] text-black hover:bg-[#7BA4D0] hover:text-white border-2 border-[#7BA4D0]'
                             }`}
                           >
                             <span className="text-xl mb-1">{type.icon}</span>
@@ -587,24 +605,24 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
                     {/* Site and Date */}
                     <div className="grid grid-cols-1 gap-4">
                       <div>
-                        <label className="block text-sm font-medium mb-2 text-gray-700">Site Location *</label>
+                        <label className="block text-sm font-medium mb-2 text-black">Site Location *</label>
                         <input
                           type="text"
                           value={siteLocation}
                           onChange={e => setSiteLocation(e.target.value)}
-                          className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm"
+                          className="w-full border border-[#7BA4D0] p-3 rounded-lg focus:ring-2 focus:ring-[#5483B3] focus:border-[#5483B3] outline-none transition text-sm text-black"
                           placeholder="Enter site location"
                           required
                         />
                       </div>
                       
                       <div>
-                        <label className="block text-sm font-medium mb-2 text-gray-700">Date *</label>
+                        <label className="block text-sm font-medium mb-2 text-black">Date *</label>
                         <input
                           type="date"
-                          value={date}
-                          onChange={e => setDate(e.target.value)}
-                          className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm"
+                          value={report_date}
+                          onChange={e => setReportDate(e.target.value)}
+                          className="w-full border border-[#7BA4D0] p-3 rounded-lg focus:ring-2 focus:ring-[#5483B3] focus:border-[#5483B3] outline-none transition text-sm text-black"
                           required
                         />
                       </div>
@@ -612,12 +630,12 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
                     
                     {/* Customer Information */}
                     <div>
-                      <label className="block text-sm font-medium mb-2 text-gray-700">Client Name *</label>
+                      <label className="block text-sm font-medium mb-2 text-black">Client Name *</label>
                       <input
                         type="text"
                         value={customerName}
                         onChange={e => setCustomerName(e.target.value)}
-                        className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm"
+                        className="w-full border border-[#7BA4D0] p-3 rounded-lg focus:ring-2 focus:ring-[#5483B3] focus:border-[#5483B3] outline-none transition text-sm text-black"
                         placeholder="Enter client name"
                         required
                       />
@@ -625,11 +643,11 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
                     
                     {/* SLA Type */}
                     <div>
-                      <label className="block text-sm font-medium mb-2 text-gray-700">SLA Type</label>
+                      <label className="block text-sm font-medium mb-2 text-black">SLA Type</label>
                       <select
                         value={slaType}
                         onChange={(e) => setSlaType(e.target.value)}
-                        className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm bg-white"
+                        className="w-full border border-[#7BA4D0] p-3 rounded-lg focus:ring-2 focus:ring-[#5483B3] focus:border-[#5483B3] outline-none transition text-sm bg-white text-black"
                       >
                         <option value="">Select SLA type</option>
                         {slaOptions.map((sla) => (
@@ -639,28 +657,44 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
                     </div>
                     
                     {/* Equipment Information */}
-                    <div className="grid grid-cols-1 gap-4">
+                    <div className="space-y-4">
                       <div>
-                        <label className="block text-sm font-medium mb-2 text-gray-700">Equipment Type</label>
+                        <div className="flex justify-between items-center mb-2">
+                          <label className="block text-sm font-medium text-black">Equipment</label>
+                          <button
+                            type="button"
+                            onClick={() => setShowEquipmentModal(true)}
+                            className="text-xs text-[#5483B3] hover:text-black font-medium flex items-center"
+                          >
+                            <Plus className="w-3 h-3 mr-1" />
+                            Add New
+                          </button>
+                        </div>
                         <select
                           value={equipment}
-                          onChange={(e) => setEquipment(e.target.value)}
-                          className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm bg-white"
+                          onChange={(e) => {
+                            const selectedEq = availableEquipment.find(eq => eq.id === e.target.value);
+                            setEquipment(selectedEq?.id || '');
+                            setSerialNumber(selectedEq?.serial_number || '');
+                          }}
+                          className="w-full border border-[#7BA4D0] p-3 rounded-lg focus:ring-2 focus:ring-[#5483B3] focus:border-[#5483B3] outline-none transition text-sm bg-white text-black"
                         >
                           <option value="">Select equipment</option>
-                          {equipmentOptions.map((eq) => (
-                            <option key={eq} value={eq}>{eq}</option>
+                          {availableEquipment.map((eq) => (
+                            <option key={eq.id} value={eq.id}>
+                              {eq.name} - {eq.serial_number} ({eq.category})
+                            </option>
                           ))}
                         </select>
                       </div>
                       
                       <div>
-                        <label className="block text-sm font-medium mb-2 text-gray-700">Serial Number</label>
+                        <label className="block text-sm font-medium mb-2 text-black">Serial Number</label>
                         <input
                           type="text"
                           value={serialNumber}
                           onChange={e => setSerialNumber(e.target.value)}
-                          className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm"
+                          className="w-full border border-[#7BA4D0] p-3 rounded-lg focus:ring-2 focus:ring-[#5483B3] focus:border-[#5483B3] outline-none transition text-sm text-black"
                           placeholder="Equipment serial number"
                         />
                       </div>
@@ -673,22 +707,20 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
                     {reportType === 'installation' && (
                       <div>
                         <div className="flex justify-between items-center mb-2">
-                          <label className="block text-sm font-medium text-gray-700">Installation Details *</label>
+                          <label className="block text-sm font-medium text-black">Installation Details *</label>
                           <button
                             type="button"
                             onClick={applyInstallationTemplate}
-                            className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center"
+                            className="text-xs text-[#5483B3] hover:text-black font-medium flex items-center"
                           >
-                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
+                            <FileText className="w-4 h-4 mr-1" />
                             Apply Template
                           </button>
                         </div>
                         <textarea
                           value={installationDetails}
                           onChange={e => setInstallationDetails(e.target.value)}
-                          className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm"
+                          className="w-full border border-[#7BA4D0] p-3 rounded-lg focus:ring-2 focus:ring-[#5483B3] focus:border-[#5483B3] outline-none transition text-sm text-black"
                           rows={4}
                           placeholder="Describe installation process, issues encountered, etc."
                           required={reportType === 'installation'}
@@ -699,12 +731,12 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
                     {/* Work Details */}
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium mb-2 text-gray-700">Work Hours</label>
+                        <label className="block text-sm font-medium mb-2 text-black">Work Hours</label>
                         <input
                           type="number"
                           value={workHours}
                           onChange={e => setWorkHours(e.target.value)}
-                          className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm"
+                          className="w-full border border-[#7BA4D0] p-3 rounded-lg focus:ring-2 focus:ring-[#5483B3] focus:border-[#5483B3] outline-none transition text-sm text-black"
                           placeholder="Hours"
                           min="0"
                           step="0.5"
@@ -712,12 +744,12 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
                       </div>
                       
                       <div>
-                        <label className="block text-sm font-medium mb-2 text-gray-700">Parts Used</label>
+                        <label className="block text-sm font-medium mb-2 text-black">Parts Used</label>
                         <input
                           type="text"
                           value={partsUsed}
                           onChange={e => setPartsUsed(e.target.value)}
-                          className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm"
+                          className="w-full border border-[#7BA4D0] p-3 rounded-lg focus:ring-2 focus:ring-[#5483B3] focus:border-[#5483B3] outline-none transition text-sm text-black"
                           placeholder="List parts used"
                         />
                       </div>
@@ -726,23 +758,23 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
                     {/* Spares Information */}
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium mb-2 text-gray-700">Spares Used</label>
+                        <label className="block text-sm font-medium mb-2 text-black">Spares Used</label>
                         <input
                           type="text"
                           value={sparesUsed}
                           onChange={e => setSparesUsed(e.target.value)}
-                          className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm"
+                          className="w-full border border-[#7BA4D0] p-3 rounded-lg focus:ring-2 focus:ring-[#5483B3] focus:border-[#5483B3] outline-none transition text-sm text-black"
                           placeholder="e.g., 4 x P1.16"
                         />
                       </div>
                       
                       <div>
-                        <label className="block text-sm font-medium mb-2 text-gray-700">Spares Left</label>
+                        <label className="block text-sm font-medium mb-2 text-black">Spares Left</label>
                         <input
                           type="text"
                           value={sparesLeft}
                           onChange={e => setSparesLeft(e.target.value)}
-                          className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm"
+                          className="w-full border border-[#7BA4D0] p-3 rounded-lg focus:ring-2 focus:ring-[#5483B3] focus:border-[#5483B3] outline-none transition text-sm text-black"
                           placeholder="e.g., Eyean"
                         />
                       </div>
@@ -750,14 +782,14 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
                     
                     {/* General Description */}
                     <div>
-                      <label className="block text-sm font-medium mb-2 text-gray-700">
+                      <label className="block text-sm font-medium mb-2 text-black">
                         {reportType === 'maintenance' ? 'Maintenance Details' : 
                         reportType === 'repair' ? 'Issue Description' : 'Additional Notes'}
                       </label>
                       <textarea
                         value={description}
                         onChange={e => setDescription(e.target.value)}
-                        className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm"
+                        className="w-full border border-[#7BA4D0] p-3 rounded-lg focus:ring-2 focus:ring-[#5483B3] focus:border-[#5483B3] outline-none transition text-sm text-black"
                         rows={3}
                         placeholder={
                           reportType === 'maintenance' ? 'Describe maintenance performed...' : 
@@ -769,21 +801,21 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
                     
                     {/* Image Upload */}
                     <div>
-                      <label className="block text-sm font-medium mb-2 text-gray-700">Upload Image</label>
+                      <label className="block text-sm font-medium mb-2 text-black">Upload Image</label>
                       <div className="flex items-center justify-center w-full">
-                        <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors p-4">
+                        <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-[#7BA4D0] rounded-lg cursor-pointer hover:bg-[#F0F5FC] transition-colors p-4">
                           <div className="flex flex-col items-center justify-center">
-                            <svg className="w-8 h-8 mb-2 text-gray-400" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 16">
+                            <svg className="w-8 h-8 mb-2 text-[#5483B3]" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 16">
                               <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"/>
                             </svg>
-                            <p className="text-sm text-gray-500 text-center">
+                            <p className="text-sm text-black text-center">
                               {image ? (
-                                <span className="font-medium text-blue-600">{image.name}</span>
+                                <span className="font-medium text-black">{image.name}</span>
                               ) : (
                                 <span className="font-medium">Click to upload or drag and drop</span>
                               )}
                             </p>
-                            <p className="text-xs text-gray-400 mt-1">PNG, JPG, GIF (MAX. 5MB)</p>
+                            <p className="text-xs text-black mt-1">PNG, JPG, GIF (MAX. 5MB)</p>
                           </div>
                           <input 
                             type="file" 
@@ -798,14 +830,14 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
                     {/* Signatures */}
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium mb-2 text-gray-700">Technician *</label>
-                        <div className="w-full border border-gray-300 p-3 rounded-lg bg-gray-50 text-sm text-gray-700 flex items-center">
-                          <svg className="w-4 h-4 mr-2 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                        <label className="block text-sm font-medium mb-2 text-black">Technician *</label>
+                        <div className="w-full border border-[#7BA4D0] p-3 rounded-lg bg-[#F0F5FC] text-sm text-black flex items-center">
+                          <svg className="w-4 h-4 mr-2 text-[#5483B3]" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
                           </svg>
                           {selectedTech}
                         </div>
-                        <p className="text-xs text-gray-500 mt-2 flex items-center">
+                        <p className="text-xs text-black mt-2 flex items-center">
                           <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M14.243 5.757a6 6 0 10-.986 9.284 1 1 0 111.087 1.678A8 8 0 1118 10a3 3 0 01-4.8 2.401A4 4 0 1114 10a1 1 0 102 0c0-1.537-.586-3.07-1.757-4.243zM12 10a2 2 0 10-4 0 2 2 0 004 0z" clipRule="evenodd" />
                           </svg>
@@ -814,14 +846,14 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
                       </div>
                       
                       <div>
-                        <label className="block text-sm font-medium mb-2 text-gray-700">Client Signature</label>
+                        <label className="block text-sm font-medium mb-2 text-black">Client Signature</label>
                         <button
                           type="button"
                           onClick={() => setShowSignaturePad(true)}
                           className={`w-full border-2 p-3 rounded-lg text-left flex items-center justify-between text-sm ${
                             customerSignature 
-                              ? 'border-green-500 bg-green-50 text-green-700' 
-                              : 'border-gray-300 hover:bg-gray-50'
+                              ? 'border-[#5AB8A8] bg-[#F0F5FC] text-black' 
+                              : 'border-[#7BA4D0] hover:bg-[#F0F5FC] text-black'
                           } transition-colors`}
                         >
                           <span className="flex items-center">
@@ -831,11 +863,11 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
                             {customerSignature ? 'Signature recorded' : 'Click to add signature'}
                           </span>
                           {customerSignature ? (
-                            <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                            <svg className="w-5 h-5 text-[#5AB8A8]" fill="currentColor" viewBox="0 0 20 20">
                               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                             </svg>
                           ) : (
-                            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-5 h-5 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                             </svg>
                           )}
@@ -846,9 +878,9 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
                 </div>
                 
                 {showSignaturePad && (
-                  <div className="mt-6 p-5 border rounded-xl bg-white shadow-lg">
-                    <p className="text-sm mb-4 font-medium text-gray-700 flex items-center">
-                      <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <div className="mt-6 p-5 border border-[#7BA4D0] rounded-xl bg-white shadow-lg">
+                    <p className="text-sm mb-4 font-medium text-black flex items-center">
+                      <svg className="w-4 h-4 mr-2 text-[#5483B3]" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
                       </svg>
                       Please draw your signature below:
@@ -857,7 +889,7 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
                       ref={canvasRef}
                       width={400}
                       height={200}
-                      className="border rounded-lg mb-4 w-full bg-white"
+                      className="border border-[#7BA4D0] rounded-lg mb-4 w-full bg-white"
                       onMouseDown={startDrawing}
                       onMouseMove={draw}
                       onMouseUp={stopDrawing}
@@ -867,7 +899,7 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
                       <button
                         type="button"
                         onClick={saveSignature}
-                        className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center"
+                        className="bg-[#5483B3] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#3A5C80] transition-colors flex items-center"
                       >
                         <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -877,7 +909,7 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
                       <button
                         type="button"
                         onClick={clearSignature}
-                        className="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors flex items-center"
+                        className="bg-[#F0F5FC] text-black px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#7BA4D0] hover:text-white transition-colors flex items-center"
                       >
                         <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -887,23 +919,23 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
                       <button
                         type="button"
                         onClick={() => setShowSignaturePad(false)}
-                        className="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors flex items-center"
+                        className="bg-[#F0F5FC] text-black px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#7BA4D0] hover:text-white transition-colors flex items-center"
                       >
                         <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
                         </svg>
                         Cancel
                       </button>
-                      </div>
+                    </div>
                   </div>
                 )}
                 
                 {/* Submit Button */}
-                <div className="pt-6 border-t border-gray-200">
+                <div className="pt-6 border-t border-[#7BA4D0]">
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className="w-full bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 font-medium disabled:bg-blue-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center text-sm"
+                    className="w-full bg-[#5483B3] text-white px-4 py-3 rounded-lg hover:bg-[#3A5C80] font-medium disabled:bg-[#7BA4D0] disabled:cursor-not-allowed transition-colors flex items-center justify-center text-sm"
                   >
                     {isLoading ? (
                       <>
@@ -928,38 +960,34 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
           ) : (
             <div>
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-bold text-gray-800 flex items-center">
-                  <FileText className="w-5 h-5 mr-2 text-blue-600" />
+                <h3 className="text-lg font-bold text-black flex items-center">
+                  <FileText className="w-5 h-5 mr-2 text-[#5483B3]" />
                   Recent Reports
                 </h3>
                 <div className="flex space-x-2">
                   <button
                     onClick={() => setActiveTab('form')}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center"
+                    className="px-4 py-2 bg-[#5483B3] text-white rounded-md hover:bg-[#3A5C80] transition-colors flex items-center"
                   >
-                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
+                    <Plus className="w-4 h-4 mr-1" />
                     New Report
                   </button>
                 </div>
               </div>
               
               {reports.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <svg className="w-12 h-12 mx-auto text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
+                <div className="text-center py-8 text-black">
+                  <FileText className="w-12 h-12 mx-auto text-[#7BA4D0]" />
                   <p className="mt-2 text-sm">No reports submitted yet.</p>
                 </div>
               ) : (
                 <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
                   {reports.map((report) => (
-                    <div key={report.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => viewReportDetails(report)}>
+                    <div key={report.id} className="border border-[#7BA4D0] rounded-lg p-4 hover:bg-[#F0F5FC] transition-colors cursor-pointer" onClick={() => viewReportDetails(report)}>
                       {/* Ticket Link Badge */}
                       {report.ticket_id && (
                         <div className="flex items-center mb-3">
-                          <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full flex items-center">
+                          <span className="bg-[#F0F5FC] text-black text-xs px-2 py-1 rounded-full flex items-center">
                             <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
                               <path fillRule="evenodd" d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 101.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l1.5-1.5a2 2 0 11-2.828-2.828l3-3z" clipRule="evenodd" />
                             </svg>
@@ -970,31 +998,37 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
                       
                       <div className="flex justify-between items-start">
                         <div className="flex-1 min-w-0">
-                          <h4 className="font-medium text-gray-900 text-sm truncate">{report.customer_name}</h4>
-                          <p className="text-xs text-gray-600 truncate">{report.site_location}</p>
+                          <h4 className="font-medium text-black text-sm truncate">{report.customer_name}</h4>
+                          <p className="text-xs text-black truncate">{report.site_location}</p>
                           <div className="flex items-center mt-2">
-                            <span className="text-xs text-gray-500">{formatDisplayDate(report.date)}</span>
-                            <span className="mx-2 text-gray-300">•</span>
-                            <span className="text-xs capitalize px-2 py-1 rounded-full bg-blue-100 text-blue-800">
+                            <span className="text-xs text-black">{formatDisplayDate(report.report_date)}</span>
+                            <span className="mx-2 text-black">•</span>
+                            <span className="text-xs capitalize px-2 py-1 rounded-full bg-[#F0F5FC] text-black">
                               {report.report_type}
                             </span>
+                            {report.equipment_name && (
+                              <>
+                                <span className="mx-2 text-black">•</span>
+                                <span className="text-xs text-black">{report.equipment_name}</span>
+                              </>
+                            )}
                           </div>
                         </div>
                         {report.image_url && (
                           <div className="ml-2 flex-shrink-0">
-                            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                              <svg className="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                            <div className="w-8 h-8 bg-[#F0F5FC] rounded-full flex items-center justify-center">
+                              <svg className="w-4 h-4 text-[#5483B3]" fill="currentColor" viewBox="0 0 20 20">
                                 <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
                               </svg>
                             </div>
                           </div>
                         )}
                       </div>
-                      <p className="text-xs text-gray-700 mt-3 line-clamp-2">
+                      <p className="text-xs text-black mt-3 line-clamp-2">
                         {report.installation_details || report.description || 'No description provided'}
                       </p>
                       {report.work_hours && (
-                        <div className="flex items-center mt-3 text-xs text-gray-500">
+                        <div className="flex items-center mt-3 text-xs text-black">
                           <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
                           </svg>
@@ -1002,8 +1036,8 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
                         </div>
                       )}
                       
-                      <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between items-center">
-                        <span className="text-xs text-gray-500">Click to view full report</span>
+                      <div className="mt-3 pt-3 border-t border-[#F0F5FC] flex justify-between items-center">
+                        <span className="text-xs text-black">Click to view full report</span>
                         <div className="flex space-x-2">
                           {report.ticket_id && (
                             <button
@@ -1011,7 +1045,7 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
                                 e.stopPropagation();
                                 navigate(`/tickets/${report.ticket_id}`);
                               }}
-                              className="text-xs text-blue-600 hover:text-blue-800 flex items-center"
+                              className="text-xs text-[#5483B3] hover:text-black flex items-center"
                             >
                               <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
                                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l3-2z" clipRule="evenodd" />
@@ -1024,7 +1058,7 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
                               e.stopPropagation();
                               downloadReport(report);
                             }}
-                            className="text-xs text-gray-600 hover:text-gray-800 flex items-center"
+                            className="text-xs text-[#5483B3] hover:text-black flex items-center"
                           >
                             <Download className="w-4 h-4 mr-1" />
                             Download
@@ -1040,16 +1074,73 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
         </div>
       </div>
 
+      {/* Add Equipment Modal */}
+      {showEquipmentModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            <div className="px-5 py-4 border-b border-[#7BA4D0]">
+              <h2 className="text-lg font-semibold text-black">Add New Equipment</h2>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-black mb-1">Equipment Name *</label>
+                <input
+                  type="text"
+                  value={newEquipment.name}
+                  onChange={(e) => setNewEquipment({...newEquipment, name: e.target.value})}
+                  className="w-full px-3 py-2 text-sm border border-[#7BA4D0] rounded-lg focus:ring-1 focus:ring-[#5483B3] focus:border-[#5483B3] text-black"
+                  placeholder="Enter equipment name"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-black mb-1">Category</label>
+                <input
+                  type="text"
+                  value={newEquipment.category}
+                  onChange={(e) => setNewEquipment({...newEquipment, category: e.target.value})}
+                  className="w-full px-3 py-2 text-sm border border-[#7BA4D0] rounded-lg focus:ring-1 focus:ring-[#5483B3] focus:border-[#5483B3] text-black"
+                  placeholder="Enter category"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-black mb-1">Serial Number</label>
+                <input
+                  type="text"
+                  value={newEquipment.serial_number}
+                  onChange={(e) => setNewEquipment({...newEquipment, serial_number: e.target.value})}
+                  className="w-full px-3 py-2 text-sm border border-[#7BA4D0] rounded-lg focus:ring-1 focus:ring-[#5483B3] focus:border-[#5483B3] text-black"
+                  placeholder="Enter serial number"
+                />
+              </div>
+            </div>
+            <div className="px-5 py-4 border-t border-[#7BA4D0] bg-[#F0F5FC] flex gap-3 justify-end">
+              <button
+                onClick={() => setShowEquipmentModal(false)}
+                className="px-4 py-2 text-sm text-[#5483B3] hover:text-black font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddEquipment}
+                className="px-4 py-2 bg-[#5483B3] hover:bg-[#3A5C80] text-white text-sm font-medium rounded transition-colors duration-200"
+              >
+                Add Equipment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Report Details Modal */}
       {showReportModal && selectedReport && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold text-gray-800">Field Service Report Details</h2>
+                <h2 className="text-xl font-bold text-black">Field Service Report Details</h2>
                 <button
                   onClick={() => setShowReportModal(false)}
-                  className="text-gray-500 hover:text-gray-700"
+                  className="text-black hover:text-[#5483B3]"
                 >
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -1060,88 +1151,88 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4">
                   <div>
-                    <h3 className="text-sm font-medium text-gray-500">Client Name</h3>
-                    <p className="text-gray-900">{selectedReport.customer_name}</p>
+                    <h3 className="text-sm font-medium text-black">Client Name</h3>
+                    <p className="text-black">{selectedReport.customer_name}</p>
                   </div>
                   
                   <div>
-                    <h3 className="text-sm font-medium text-gray-500">Site Location</h3>
-                    <p className="text-gray-900">{selectedReport.site_location}</p>
+                    <h3 className="text-sm font-medium text-black">Site Location</h3>
+                    <p className="text-black">{selectedReport.site_location}</p>
                   </div>
                   
                   <div>
-                    <h3 className="text-sm font-medium text-gray-500">Date</h3>
-                    <p className="text-gray-900">{formatDisplayDate(selectedReport.date)}</p>
+                    <h3 className="text-sm font-medium text-black">Date</h3>
+                    <p className="text-black">{formatDisplayDate(selectedReport.report_date)}</p>
                   </div>
                   
                   <div>
-                    <h3 className="text-sm font-medium text-gray-500">Report Type</h3>
-                    <p className="text-gray-900 capitalize">{selectedReport.report_type}</p>
+                    <h3 className="text-sm font-medium text-black">Report Type</h3>
+                    <p className="text-black capitalize">{selectedReport.report_type}</p>
                   </div>
                   
                   <div>
-                    <h3 className="text-sm font-medium text-gray-500">SLA Type</h3>
-                    <p className="text-gray-900">{selectedReport.sla_type || 'N/A'}</p>
+                    <h3 className="text-sm font-medium text-black">SLA Type</h3>
+                    <p className="text-black">{selectedReport.sla_type || 'N/A'}</p>
                   </div>
                   
                   <div>
-                    <h3 className="text-sm font-medium text-gray-500">Technician</h3>
-                    <p className="text-gray-900">{selectedReport.technician}</p>
+                    <h3 className="text-sm font-medium text-black">Technician</h3>
+                    <p className="text-black">{selectedReport.technician_name}</p>
                   </div>
                 </div>
                 
                 <div className="space-y-4">
                   {selectedReport.equipment && (
                     <div>
-                      <h3 className="text-sm font-medium text-gray-500">Equipment</h3>
-                      <p className="text-gray-900">{selectedReport.equipment}</p>
+                      <h3 className="text-sm font-medium text-black">Equipment</h3>
+                      <p className="text-black">{selectedReport.equipment_name || selectedReport.equipment}</p>
                     </div>
                   )}
                   
                   {selectedReport.serial_number && (
                     <div>
-                      <h3 className="text-sm font-medium text-gray-500">Serial Number</h3>
-                      <p className="text-gray-900">{selectedReport.serial_number}</p>
+                      <h3 className="text-sm font-medium text-black">Serial Number</h3>
+                      <p className="text-black">{selectedReport.serial_number}</p>
                     </div>
                   )}
                   
                   {selectedReport.work_hours && (
                     <div>
-                      <h3 className="text-sm font-medium text-gray-500">Work Hours</h3>
-                      <p className="text-gray-900">{selectedReport.work_hours} hours</p>
+                      <h3 className="text-sm font-medium text-black">Work Hours</h3>
+                      <p className="text-black">{selectedReport.work_hours} hours</p>
                     </div>
                   )}
                   
                   {selectedReport.parts_used && (
                     <div>
-                      <h3 className="text-sm font-medium text-gray-500">Parts Used</h3>
-                      <p className="text-gray-900">{selectedReport.parts_used}</p>
+                      <h3 className="text-sm font-medium text-black">Parts Used</h3>
+                      <p className="text-black">{selectedReport.parts_used}</p>
                     </div>
                   )}
                   
                   {selectedReport.spares_used && (
                     <div>
-                      <h3 className="text-sm font-medium text-gray-500">Spares Used</h3>
-                      <p className="text-gray-900">{selectedReport.spares_used}</p>
+                      <h3 className="text-sm font-medium text-black">Spares Used</h3>
+                      <p className="text-black">{selectedReport.spares_used}</p>
                     </div>
                   )}
                   
                   {selectedReport.spares_left && (
                     <div>
-                      <h3 className="text-sm font-medium text-gray-500">Spares Left</h3>
-                      <p className="text-gray-900">{selectedReport.spares_left}</p>
+                      <h3 className="text-sm font-medium text-black">Spares Left</h3>
+                      <p className="text-black">{selectedReport.spares_left}</p>
                     </div>
                   )}
                 </div>
               </div>
               
               {(selectedReport.installation_details || selectedReport.description) && (
-                <div className="mt-6 pt-6 border-t border-gray-200">
-                  <h3 className="text-sm font-medium text-gray-500 mb-2">
+                <div className="mt-6 pt-6 border-t border-[#7BA4D0]">
+                  <h3 className="text-sm font-medium text-black mb-2">
                     {selectedReport.report_type === 'installation' ? 'Installation Details' : 'Description'}
                   </h3>
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <p className="text-gray-900 whitespace-pre-line">
+                  <div className="bg-[#F0F5FC] p-4 rounded-lg">
+                    <p className="text-black whitespace-pre-line">
                       {selectedReport.installation_details || selectedReport.description}
                     </p>
                   </div>
@@ -1149,9 +1240,9 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
               )}
               
               {selectedReport.customer_signature && (
-                <div className="mt-6 pt-6 border-t border-gray-200">
-                  <h3 className="text-sm font-medium text-gray-500 mb-2">Customer Signature</h3>
-                  <div className="bg-gray-50 p-4 rounded-lg flex justify-center">
+                <div className="mt-6 pt-6 border-t border-[#7BA4D0]">
+                  <h3 className="text-sm font-medium text-black mb-2">Customer Signature</h3>
+                  <div className="bg-[#F0F5FC] p-4 rounded-lg flex justify-center">
                     <img 
                       src={selectedReport.customer_signature} 
                       alt="Customer signature" 
@@ -1162,9 +1253,9 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
               )}
               
               {selectedReport.image_url && (
-                <div className="mt-6 pt-6 border-t border-gray-200">
-                  <h3 className="text-sm font-medium text-gray-500 mb-2">Attached Image</h3>
-                  <div className="bg-gray-50 p-4 rounded-lg flex justify-center">
+                <div className="mt-6 pt-6 border-t border-[#7BA4D0]">
+                  <h3 className="text-sm font-medium text-black mb-2">Attached Image</h3>
+                  <div className="bg-[#F0F5FC] p-4 rounded-lg flex justify-center">
                     <img 
                       src={selectedReport.image_url} 
                       alt="Field report" 
@@ -1175,13 +1266,13 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
               )}
               
               {selectedReport.ticket_id && (
-                <div className="mt-6 pt-6 border-t border-gray-200">
-                  <h3 className="text-sm font-medium text-gray-500 mb-2">Linked Ticket</h3>
+                <div className="mt-6 pt-6 border-t border-[#7BA4D0]">
+                  <h3 className="text-sm font-medium text-black mb-2">Linked Ticket</h3>
                   <div className="flex items-center">
-                    <span className="text-gray-900 mr-3">Ticket #{selectedReport.ticket_number}</span>
+                    <span className="text-black mr-3">Ticket #{selectedReport.ticket_number}</span>
                     <button
                       onClick={() => navigate(`/tickets/${selectedReport.ticket_id}`)}
-                      className="text-blue-600 hover:text-blue-800 flex items-center text-sm"
+                      className="text-[#5483B3] hover:text-black flex items-center text-sm"
                     >
                       <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l3-2z" clipRule="evenodd" />
@@ -1192,17 +1283,17 @@ const FieldReport: React.FC<FieldReportProps> = ({ currentUser }) => {
                 </div>
               )}
               
-              <div className="mt-6 pt-6 border-t border-gray-200 flex justify-end space-x-3">
+              <div className="mt-6 pt-6 border-t border-[#7BA4D0] flex justify-end space-x-3">
                 <button
                   onClick={() => downloadReport(selectedReport)}
-                  className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors flex items-center"
+                  className="px-4 py-2 bg-[#5483B3] text-white rounded-md hover:bg-[#3A5C80] transition-colors flex items-center"
                 >
                   <Printer className="w-4 h-4 mr-2" />
                   Print Report
                 </button>
                 <button
                   onClick={() => setShowReportModal(false)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                  className="px-4 py-2 bg-[#7BA4D0] text-white rounded-md hover:bg-[#5483B3] transition-colors"
                 >
                   Close
                 </button>

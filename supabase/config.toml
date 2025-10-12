@@ -9,3 +9,47 @@ entrypoint = "./functions/invite-user/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/invite-user/*.html" ]
+
+[functions.send-ticket-notification]
+enabled = true
+verify_jwt = true
+import_map = "./functions/send-ticket-notification/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/send-ticket-notification/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/send-ticket-notification/*.html" ]
+
+[functions.teams-oauth]
+enabled = true
+verify_jwt = true
+import_map = "./functions/teams-oauth/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/teams-oauth/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/teams-oauth/*.html" ]
+
+[functions.send-ticket-email]
+enabled = true
+verify_jwt = true
+import_map = "./functions/send-ticket-email/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/send-ticket-email/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/send-ticket-email/*.html" ]
+
+[functions.send-admin-notification]
+enabled = true
+verify_jwt = true
+import_map = "./functions/send-admin-notification/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/send-admin-notification/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/send-admin-notification/*.html" ]

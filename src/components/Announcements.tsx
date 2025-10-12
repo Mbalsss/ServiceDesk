@@ -1,23 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Megaphone, 
-  Plus, 
-  AlertTriangle, 
-  Info, 
-  Zap, 
-  User, 
-  Calendar, 
-  Filter, 
-  Trash,
-  X,
-  Bell,
-  CheckCircle,
-  Search,
-  ChevronDown,
-  Check,
-  Shield,
-  ShieldOff
-} from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 const Announcements = () => {
@@ -32,20 +13,14 @@ const Announcements = () => {
     author: '',
     target_audience: 'all'
   });
-  const [audienceFilter, setAudienceFilter] = useState('all');
   const [userRole, setUserRole] = useState('user');
   const [currentUser, setCurrentUser] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
-  const [audienceDropdownOpen, setAudienceDropdownOpen] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
-  const [showError, setShowError] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
+  const [expandedAnnouncements, setExpandedAnnouncements] = useState(new Set());
 
-  // Fetch announcements from Supabase
   useEffect(() => {
     fetchAnnouncements();
     fetchUserData();
@@ -60,11 +35,7 @@ const Announcements = () => {
         .eq('is_active', true)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Error fetching announcements:', error);
-        return;
-      }
-
+      if (error) throw error;
       setAnnouncements(data || []);
     } catch (error) {
       console.error('Error fetching announcements:', error);
@@ -78,141 +49,117 @@ const Announcements = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         setCurrentUser(user);
-        
-        // Fetch user role from profiles table
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from('profiles')
           .select('role')
           .eq('id', user.id)
           .single();
-
-        if (data) {
-          setUserRole(data.role);
-        }
+        if (data) setUserRole(data.role);
       }
     } catch (error) {
       console.error('Error fetching user data:', error);
     }
   };
 
-  const filteredAnnouncements = announcements.filter(a => {
-    if (!a.is_active) return false;
+  const filteredAnnouncements = announcements.filter(announcement => {
+    if (!announcement.is_active) return false;
     
-    // Filter by category
-    if (filter !== 'all' && a.category !== filter) return false;
+    if (filter !== 'all' && announcement.category !== filter) return false;
     
-    // Filter by audience
-    if (audienceFilter !== 'all' && a.target_audience !== audienceFilter) return false;
+    if (announcement.target_audience === 'technicians' && userRole !== 'technician') return false;
+    if (announcement.target_audience === 'users' && userRole === 'technician') return false;
     
-    // Show announcements based on user role
-    if (a.target_audience === 'technicians' && userRole !== 'technician') return false;
-    
-    // Filter by search query
-    if (searchQuery && !a.title.toLowerCase().includes(searchQuery.toLowerCase()) && 
-        !a.content.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      return announcement.title.toLowerCase().includes(query) || 
+             announcement.content.toLowerCase().includes(query);
+    }
     
     return true;
   });
 
-  const highPriorityAnnouncements = announcements.filter(a => a.priority === 'high' && a.is_active);
-  const totalActiveAnnouncements = announcements.filter(a => a.is_active);
-  const unreadAnnouncements = announcements.filter(a => a.is_active && !a.is_read);
-
-  const getCategoryColor = (category) => {
-    switch (category) {
-      case 'maintenance': return 'text-red-600 bg-red-100 border-red-200';
-      case 'policy': return 'text-blue-600 bg-blue-100 border-blue-200';
-      case 'system_update': return 'text-green-600 bg-green-100 border-green-200';
-      case 'general': return 'text-gray-600 bg-gray-100 border-gray-200';
-      default: return 'text-gray-600 bg-gray-100 border-gray-200';
-    }
+  const getCategoryConfig = (category) => {
+    const configs = {
+      maintenance: { 
+        bg: 'bg-red-50',
+        border: 'border-red-200',
+        text: 'text-red-700',
+        label: 'Maintenance'
+      },
+      policy: { 
+        bg: 'bg-[#F0F5FC]',
+        border: 'border-[#5483B3]',
+        text: 'text-[#5483B3]',
+        label: 'Policy'
+      },
+      system_update: { 
+        bg: 'bg-green-50',
+        border: 'border-green-200',
+        text: 'text-green-700',
+        label: 'System Update'
+      },
+      general: { 
+        bg: 'bg-gray-50',
+        border: 'border-gray-200',
+        text: 'text-gray-700',
+        label: 'General'
+      }
+    };
+    return configs[category] || configs.general;
   };
 
-  const getCategoryIcon = (category) => {
-    switch (category) {
-      case 'maintenance': return <AlertTriangle className="w-4 h-4" />;
-      case 'policy': return <Info className="w-4 h-4" />;
-      case 'system_update': return <Zap className="w-4 h-4" />;
-      case 'general': return <Megaphone className="w-4 h-4" />;
-      default: return <Megaphone className="w-4 h-4" />;
-    }
+  const getPriorityConfig = (priority) => {
+    const configs = {
+      high: { label: 'High', bg: 'bg-red-100', text: 'text-red-700' },
+      medium: { label: 'Medium', bg: 'bg-yellow-100', text: 'text-yellow-700' },
+      low: { label: 'Low', bg: 'bg-green-100', text: 'text-green-700' }
+    };
+    return configs[priority] || configs.low;
   };
 
-  const getPriorityColor = (priority) => {
-    switch (priority) {
-      case 'high': return 'text-red-600 bg-red-100 border-red-200';
-      case 'medium': return 'text-yellow-600 bg-yellow-100 border-yellow-200';
-      case 'low': return 'text-green-600 bg-green-100 border-green-200';
-      default: return 'text-gray-600 bg-gray-100 border-gray-200';
-    }
+  const getAudienceConfig = (audience) => {
+    const configs = {
+      all: { label: 'All Users', bg: 'bg-[#F0F5FC]', text: 'text-[#5483B3]' },
+      technicians: { label: 'Technicians', bg: 'bg-blue-50', text: 'text-[#7BA4D0]' },
+      users: { label: 'End Users', bg: 'bg-green-50', text: 'text-[#5AB8A8]' }
+    };
+    return configs[audience] || configs.all;
   };
 
-  const getAudienceLabel = (audience) => {
-    switch (audience) {
-      case 'all': return 'All Users';
-      case 'technicians': return 'Technicians Only';
-      case 'users': return 'End Users Only';
-      default: return audience;
+  const toggleExpand = (id) => {
+    const newExpanded = new Set(expandedAnnouncements);
+    if (newExpanded.has(id)) {
+      newExpanded.delete(id);
+    } else {
+      newExpanded.add(id);
     }
-  };
-
-  const getCategoryLabel = (category) => {
-    switch (category) {
-      case 'all': return 'All Categories';
-      case 'maintenance': return 'Maintenance';
-      case 'policy': return 'Policy Update';
-      case 'system_update': return 'System Update';
-      case 'general': return 'General';
-      default: return category;
-    }
-  };
-
-  const formatDisplayValue = (value) => {
-    // Capitalize first letter of each word
-    return value.replace(/_/g, ' ')
-               .split(' ')
-               .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-               .join(' ');
+    setExpandedAnnouncements(newExpanded);
   };
 
   const handleAddAnnouncement = async () => {
+    if (!newAnnouncement.title || !newAnnouncement.content) return;
+
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
-      const newItem = {
+      const announcementData = {
         ...newAnnouncement,
         is_active: true,
-        is_read: true, // Creator automatically marks as read
+        is_read: false,
         created_at: new Date().toISOString(),
-        author: newAnnouncement.author || user?.email || 'Unknown'
+        author: newAnnouncement.author || user?.email || 'Admin'
       };
 
       const { data, error } = await supabase
         .from('announcements')
-        .insert([newItem])
+        .insert([announcementData])
         .select();
 
-      if (error) {
-        console.error('Error adding announcement:', error);
-        setErrorMessage('Failed to create announcement. Please try again.');
-        setShowError(true);
-        return;
-      }
+      if (error) throw error;
 
-      if (data && data.length > 0) {
-        // Add the new announcement to the beginning of the list
-        setAnnouncements(prev => [data[0], ...prev]);
-        
-        // Show success message
-        setSuccessMessage('Announcement created successfully!');
-        setShowSuccess(true);
-        
-        // Hide success message after 3 seconds
-        setTimeout(() => {
-          setShowSuccess(false);
-        }, 3000);
-      }
-
+      setAnnouncements(prev => [data[0], ...prev]);
+      setSuccessMessage('Announcement published successfully!');
+      setShowSuccess(true);
       setShowModal(false);
       setNewAnnouncement({
         title: '',
@@ -222,10 +169,13 @@ const Announcements = () => {
         author: '',
         target_audience: 'all'
       });
+
+      setTimeout(() => setShowSuccess(false), 3000);
     } catch (error) {
-      console.error('Error adding announcement:', error);
-      setErrorMessage('An unexpected error occurred. Please try again.');
-      setShowError(true);
+      console.error('Error creating announcement:', error);
+      setSuccessMessage('Error creating announcement');
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
     }
   };
 
@@ -236,94 +186,53 @@ const Announcements = () => {
         .update({ is_read: true })
         .eq('id', id);
 
-      if (error) {
-        console.error('Error marking as read:', error);
-        return;
-      }
+      if (error) throw error;
 
-      // Update the UI
-      setAnnouncements(prevAnnouncements => 
-        prevAnnouncements.map(a => 
-          a.id === id ? { ...a, is_read: true } : a
-        )
+      setAnnouncements(prev => 
+        prev.map(a => a.id === id ? { ...a, is_read: true } : a)
       );
     } catch (error) {
       console.error('Error marking as read:', error);
     }
   };
 
-  const handleMarkAllAsRead = async () => {
-    try {
-      const { error } = await supabase
-        .from('announcements')
-        .update({ is_read: true })
-        .eq('is_active', true);
-
-      if (error) {
-        console.error('Error marking all as read:', error);
-        return;
-      }
-
-      // Update the UI
-      setAnnouncements(prevAnnouncements => 
-        prevAnnouncements.map(a => ({ ...a, is_read: true }))
-      );
-    } catch (error) {
-      console.error('Error marking all as read:', error);
-    }
-  };
-
   const handleDeleteAnnouncement = async (id) => {
+    if (!confirm('Are you sure you want to delete this announcement?')) return;
+
     try {
-      // Perform a soft delete by setting is_active to false
       const { error } = await supabase
         .from('announcements')
         .update({ is_active: false })
         .eq('id', id);
 
-      if (error) {
-        console.error('Error deleting announcement:', error);
-        setErrorMessage('Failed to delete announcement. Please try again.');
-        setShowError(true);
-        return;
-      }
+      if (error) throw error;
 
-      // Update the UI by removing the deleted announcement from state
-      setAnnouncements(prevAnnouncements => 
-        prevAnnouncements.filter(a => a.id !== id)
-      );
-      
-      // Show success message
-      setSuccessMessage('Announcement deleted successfully!');
+      setAnnouncements(prev => prev.filter(a => a.id !== id));
+      setSuccessMessage('Announcement deleted successfully');
       setShowSuccess(true);
-      
-      // Hide success message after 3 seconds
-      setTimeout(() => {
-        setShowSuccess(false);
-      }, 3000);
+      setTimeout(() => setShowSuccess(false), 3000);
     } catch (error) {
       console.error('Error deleting announcement:', error);
-      setErrorMessage('An unexpected error occurred. Please try again.');
-      setShowError(true);
     }
   };
 
   const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleString(undefined, {
-      year: 'numeric',
+    return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
+      year: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
     });
   };
 
+  const unreadCount = announcements.filter(a => a.is_active && !a.is_read).length;
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 p-6 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 p-3 sm:p-4 md:p-6 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#5483B3] mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading announcements...</p>
         </div>
       </div>
@@ -331,296 +240,203 @@ const Announcements = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      {/* Success Message */}
+    <div className="min-h-screen bg-gray-50 p-3 sm:p-4 md:p-6">
+      {/* Success Toast */}
       {showSuccess && (
         <div className="fixed top-4 right-4 z-50">
-          <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg shadow-md flex items-center">
-            <Check className="w-5 h-5 mr-2" />
-            <span>{successMessage}</span>
+          <div className="bg-green-50 text-green-800 px-4 sm:px-6 py-3 rounded-lg shadow-lg border border-green-200 flex items-center space-x-2 max-w-xs sm:max-w-md">
+            <div className="w-3 h-3 sm:w-4 sm:h-4 bg-green-600 rounded-full flex-shrink-0"></div>
+            <span className="font-medium text-sm sm:text-base">{successMessage}</span>
             <button 
               onClick={() => setShowSuccess(false)}
-              className="ml-4 text-green-700 hover:text-green-900"
+              className="ml-2 sm:ml-4 text-green-600 hover:text-green-800 flex-shrink-0"
             >
-              <X className="w-4 h-4" />
+              <div className="w-4 h-4 bg-green-600 rounded-full flex items-center justify-center text-white text-xs">×</div>
             </button>
           </div>
         </div>
       )}
 
-      {/* Error Message */}
-      {showError && (
-        <div className="fixed top-4 right-4 z-50">
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg shadow-md flex items-center">
-            <ShieldOff className="w-5 h-5 mr-2" />
-            <span>{errorMessage}</span>
-            <button 
-              onClick={() => setShowError(false)}
-              className="ml-4 text-red-700 hover:text-red-900"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
-      
-      <div className="max-w-7xl mx-auto bg-white rounded-xl shadow-sm p-6">
+      <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Service Desk Announcements</h1>
-              <p className="text-gray-600">Important updates and notifications for users and technicians</p>
+        <div className="mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-4">
+            <div className="flex-1">
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mb-1 sm:mb-2">Announcements</h1>
+              <p className="text-gray-600 text-sm sm:text-base">Stay updated with system news and updates</p>
             </div>
-            <div className="flex gap-2">
-              {unreadAnnouncements.length > 0 && (
+            <div className="flex items-center space-x-2 flex-wrap gap-2">
+              {unreadCount > 0 && (
                 <button 
-                  onClick={handleMarkAllAsRead}
-                  className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                  onClick={() => {
+                    filteredAnnouncements.forEach(a => {
+                      if (!a.is_read) handleMarkAsRead(a.id);
+                    });
+                  }}
+                  className="flex items-center space-x-2 px-3 sm:px-4 py-2 bg-white text-gray-700 rounded-lg border border-gray-200 hover:border-gray-300 transition-all shadow-sm hover:shadow text-xs sm:text-sm"
                 >
-                  <CheckCircle className="w-4 h-4" />
-                  <span>Mark All as Read</span>
+                  <div className="w-3 h-3 sm:w-4 sm:h-4 bg-[#5483B3] rounded-full flex items-center justify-center text-white text-xs">✓</div>
+                  <span>Mark All Read</span>
+                  <span className="bg-[#5483B3] text-white text-xs rounded-full px-2 py-1 min-w-6">
+                    {unreadCount}
+                  </span>
                 </button>
               )}
               <button 
-                onClick={() => setShowModal(true)} 
-                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                onClick={() => setShowModal(true)}
+                className="flex items-center space-x-2 px-3 sm:px-4 py-2 bg-[#5483B3] text-white rounded-lg hover:bg-[#3A5C80] transition-all shadow hover:shadow-md text-xs sm:text-sm"
               >
-                <Plus className="w-4 h-4" />
+                <div className="w-3 h-3 sm:w-4 sm:h-4 bg-white rounded-full flex items-center justify-center text-[#5483B3] text-xs font-bold">+</div>
                 <span>New Announcement</span>
               </button>
             </div>
           </div>
-        </div>
 
-        {/* Search and Filter Bar */}
-        <div className="mb-8 bg-gray-50 rounded-xl p-4">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="relative flex-1">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search className="h-5 w-5 text-gray-400" />
-              </div>
-              <input
-                type="text"
-                placeholder="Search announcements..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-            
-            <button 
-              onClick={() => setShowFilters(!showFilters)}
-              className="flex items-center space-x-2 px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              <Filter className="w-5 h-5 text-gray-500" />
-              <span>Filters</span>
-            </button>
-          </div>
-
-          {/* Expanded Filters */}
-          {showFilters && (
-            <div className="mt-4 pt-4 border-t border-gray-200">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <h3 className="font-medium text-gray-700 mb-3">Category</h3>
-                  <div className="relative">
-                    <button 
-                      onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
-                      className="w-full flex items-center justify-between px-4 py-2 bg-white border border-gray-300 rounded-lg text-left"
-                    >
-                      <span>{getCategoryLabel(filter)}</span>
-                      <ChevronDown className="w-4 h-4" />
-                    </button>
-                    
-                    {categoryDropdownOpen && (
-                      <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg">
-                        {['all', 'maintenance', 'policy', 'system_update', 'general'].map(f => (
-                          <button 
-                            key={f} 
-                            onClick={() => {
-                              setFilter(f);
-                              setCategoryDropdownOpen(false);
-                            }}
-                            className={`block w-full text-left px-4 py-2 hover:bg-gray-100 ${filter === f ? 'bg-blue-50 text-blue-700' : ''}`}
-                          >
-                            {getCategoryLabel(f)}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                
-                <div>
-                  <h3 className="font-medium text-gray-700 mb-3">Audience</h3>
-                  <div className="relative">
-                    <button 
-                      onClick={() => setAudienceDropdownOpen(!audienceDropdownOpen)}
-                      className="w-full flex items-center justify-between px-4 py-2 bg-white border border-gray-300 rounded-lg text-left"
-                    >
-                      <span>{getAudienceLabel(audienceFilter)}</span>
-                      <ChevronDown className="w-4 h-4" />
-                    </button>
-                    
-                    {audienceDropdownOpen && (
-                      <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg">
-                        {['all', 'technicians', 'users'].map(f => (
-                          <button 
-                            key={f} 
-                            onClick={() => {
-                              setAudienceFilter(f);
-                              setAudienceDropdownOpen(false);
-                            }}
-                            className={`block w-full text-left px-4 py-2 hover:bg-gray-100 ${audienceFilter === f ? 'bg-blue-50 text-blue-700' : ''}`}
-                          >
-                            {getAudienceLabel(f)}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+          {/* Stats and Search */}
+          <div className="bg-white rounded-lg p-3 sm:p-4 shadow-sm border border-gray-200">
+            <div className="flex flex-col lg:flex-row gap-3 sm:gap-4">
+              <div className="flex-1">
+                <div className="relative">
+                  <div className="w-4 h-4 bg-gray-400 rounded absolute left-3 top-1/2 transform -translate-y-1/2"></div>
+                  <input
+                    type="text"
+                    placeholder="Search announcements..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#5483B3] focus:border-[#5483B3] transition-all text-sm sm:text-base"
+                  />
                 </div>
               </div>
               
-              <div className="mt-4 pt-4 border-t border-gray-200 flex justify-between">
-                <span className="text-sm text-gray-500">
-                  Showing {filteredAnnouncements.length} of {totalActiveAnnouncements.length} announcements
-                </span>
-                <button 
-                  onClick={() => {
-                    setFilter('all');
-                    setAudienceFilter('all');
-                    setSearchQuery('');
-                  }}
-                  className="text-sm text-blue-600 hover:text-blue-800"
-                >
-                  Clear all filters
-                </button>
+              <div className="flex flex-wrap gap-2">
+                {['all', 'general', 'maintenance', 'policy', 'system_update'].map(category => {
+                  const config = category === 'all' ? { bg: 'bg-gray-100', text: 'text-gray-700' } : getCategoryConfig(category);
+                  const isActive = filter === category;
+                  
+                  return (
+                    <button
+                      key={category}
+                      onClick={() => setFilter(category)}
+                      className={`px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg font-medium transition-all text-xs sm:text-sm ${
+                        isActive 
+                          ? 'bg-[#5483B3] text-white shadow' 
+                          : `${config.bg} ${config.text} border border-gray-200 hover:border-gray-300 shadow-sm hover:shadow`
+                      }`}
+                    >
+                      {category === 'all' ? 'All' : config.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
-          )}
-        </div>
-
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-blue-50 rounded-xl p-6 flex items-center border border-blue-100">
-            <div className="bg-blue-100 p-4 rounded-xl"><Megaphone className="w-8 h-8 text-blue-600" /></div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Active Announcements</p>
-              <p className="text-2xl font-bold text-blue-600">{totalActiveAnnouncements.length}</p>
-            </div>
-          </div>
-          <div className="bg-red-50 rounded-xl p-6 flex items-center border border-red-100">
-            <div className="bg-red-100 p-4 rounded-xl"><AlertTriangle className="w-8 h-8 text-red-600" /></div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">High Priority</p>
-              <p className="text-2xl font-bold text-red-600">{highPriorityAnnouncements.length}</p>
-            </div>
-          </div>
-          <div className="bg-orange-50 rounded-xl p-6 flex items-center border border-orange-100">
-            <div className="bg-orange-100 p-4 rounded-xl"><Bell className="w-8 h-8 text-orange-600" /></div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Unread</p>
-              <p className="text-2xl font-bold text-orange-600">{unreadAnnouncements.length}</p>
-            </div>
           </div>
         </div>
 
-        {/* Announcements List */}
-        <div className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Announcements</h2>
-          
+        {/* Announcements Grid */}
+        <div className="grid gap-3 sm:gap-4">
           {filteredAnnouncements.length > 0 ? (
-            <div className="space-y-6">
-              {filteredAnnouncements.map(a => (
+            filteredAnnouncements.map(announcement => {
+              const categoryConfig = getCategoryConfig(announcement.category);
+              const priorityConfig = getPriorityConfig(announcement.priority);
+              const audienceConfig = getAudienceConfig(announcement.target_audience);
+              const isExpanded = expandedAnnouncements.has(announcement.id);
+
+              return (
                 <div 
-                  key={a.id} 
-                  className={`bg-gray-50 rounded-xl border p-6 relative ${a.priority==='high'?'border-red-200':a.priority==='medium'?'border-yellow-200':'border-gray-200'} ${!a.is_read ? 'ring-2 ring-blue-500' : ''}`}
+                  key={announcement.id}
+                  className={`bg-white rounded-lg shadow-sm border transition-all hover:shadow ${
+                    !announcement.is_read ? 'ring-1 ring-[#5483B3] border-[#5483B3]' : 'border-gray-200'
+                  }`}
                 >
-                  {!a.is_read && (
-                    <div className="absolute -top-2 -right-2">
-                      <span className="bg-blue-500 text-white text-xs font-bold px-2 py-1 rounded-full">NEW</span>
-                    </div>
-                  )}
-                  
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center space-x-4">
-                      <div className={`p-3 rounded-xl border ${getCategoryColor(a.category)}`}>
-                        {getCategoryIcon(a.category)}
-                      </div>
-                      <div>
-                        <h3 className={`text-xl font-semibold ${a.is_read?'text-gray-700':'text-gray-900'}`}>
-                          {a.title}
-                        </h3>
-                        <div className="flex items-center space-x-2 mt-2">
-                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getCategoryColor(a.category)}`}>
-                            {formatDisplayValue(a.category)}
-                          </span>
-                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getPriorityColor(a.priority)}`}>
-                            {formatDisplayValue(a.priority)} Priority
-                          </span>
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200">
-                            {getAudienceLabel(a.target_audience)}
-                          </span>
+                  <div className="p-3 sm:p-4">
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-3">
+                      <div className="flex items-start space-x-3 flex-1">
+                        <div className={`p-2 rounded-lg ${categoryConfig.bg} ${categoryConfig.border} flex-shrink-0`}>
+                          <div className="w-4 h-4 sm:w-5 sm:h-5 bg-current rounded"></div>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-1 sm:mb-2 break-words">
+                            {announcement.title}
+                          </h3>
+                          <div className="flex flex-wrap items-center gap-1 sm:gap-2">
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${categoryConfig.bg} ${categoryConfig.text}`}>
+                              {categoryConfig.label}
+                            </span>
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${priorityConfig.bg} ${priorityConfig.text}`}>
+                              {priorityConfig.label}
+                            </span>
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${audienceConfig.bg} ${audienceConfig.text}`}>
+                              <div className="w-3 h-3 bg-current rounded mr-1"></div>
+                              {audienceConfig.label}
+                            </span>
+                          </div>
                         </div>
                       </div>
+                      
+                      <div className="flex items-center justify-end space-x-1 sm:space-x-2">
+                        {!announcement.is_read && (
+                          <button
+                            onClick={() => handleMarkAsRead(announcement.id)}
+                            className="p-1.5 text-gray-400 hover:text-[#5AB8A8] hover:bg-green-50 rounded transition-colors"
+                            title="Mark as read"
+                          >
+                            <div className="w-4 h-4 bg-[#5AB8A8] rounded-full flex items-center justify-center text-white text-xs">✓</div>
+                          </button>
+                        )}
+                        {(userRole === 'admin' || userRole === 'technician') && (
+                          <button
+                            onClick={() => handleDeleteAnnouncement(announcement.id)}
+                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                            title="Delete announcement"
+                          >
+                            <div className="w-4 h-4 bg-red-600 rounded-full flex items-center justify-center text-white text-xs">×</div>
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    
-                    <div className="flex space-x-2">
-                      {/* Only show "Mark as Read" for announcements not created by current user */}
-                      {!a.is_read && currentUser && a.author !== currentUser.email && (
-                        <button 
-                          onClick={() => handleMarkAsRead(a.id)} 
-                          className="px-3 py-1 text-sm text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-md transition-colors"
-                        >
-                          Mark as Read
-                        </button>
-                      )}
-                      <button 
-                        onClick={() => handleDeleteAnnouncement(a.id)} 
-                        className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+
+                    <div className="mb-3">
+                      <p className={`text-gray-700 leading-relaxed transition-all break-words text-sm sm:text-base ${
+                        isExpanded ? '' : 'line-clamp-3'
+                      }`}>
+                        {announcement.content}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
+                      <div className="flex items-center space-x-3 sm:space-x-4 text-xs sm:text-sm text-gray-500 flex-wrap gap-2">
+                        <div className="flex items-center">
+                          <div className="w-3 h-3 sm:w-4 sm:h-4 bg-gray-400 rounded mr-1 sm:mr-2"></div>
+                          <span className="break-words">{announcement.author || 'System'}</span>
+                        </div>
+                        <div className="flex items-center">
+                          <div className="w-3 h-3 sm:w-4 sm:h-4 bg-gray-400 rounded mr-1 sm:mr-2"></div>
+                          <span>{formatDate(announcement.created_at)}</span>
+                        </div>
+                      </div>
+                      
+                      <button
+                        onClick={() => toggleExpand(announcement.id)}
+                        className="text-[#5483B3] hover:text-[#3A5C80] font-medium text-xs sm:text-sm flex items-center space-x-1 self-start sm:self-auto"
                       >
-                        <Trash className="w-4 h-4"/>
+                        <span>{isExpanded ? 'Show less' : 'Read more'}</span>
+                        <div className={`w-3 h-3 sm:w-4 sm:h-4 bg-[#5483B3] rounded transition-transform ${isExpanded ? 'rotate-180' : ''}`}></div>
                       </button>
                     </div>
                   </div>
-                  
-                  <div className="mb-4">
-                    <p className="text-gray-700 leading-relaxed">
-                      {a.content}
-                    </p>
-                  </div>
-                  
-                  <div className="flex items-center justify-between text-sm text-gray-500">
-                    <div className="flex items-center space-x-4">
-                      <div className="flex items-center">
-                        <User className="w-4 h-4 mr-1"/>
-                        <span>By {a.author}</span>
-                      </div>
-                      <div className="flex items-center">
-                        <Calendar className="w-4 h-4 mr-1"/>
-                        <span>{formatDate(a.created_at)}</span>
-                      </div>
-                    </div>
-                  </div>
                 </div>
-              ))}
-            </div>
+              );
+            })
           ) : (
-            <div className="text-center py-16 bg-gray-50 rounded-xl border border-gray-200">
-              <Megaphone className="w-16 h-16 text-gray-400 mx-auto mb-4"/>
-              <p className="text-gray-500 text-lg">No announcements found matching your criteria.</p>
-              <button 
-                onClick={() => {
-                  setFilter('all');
-                  setAudienceFilter('all');
-                  setSearchQuery('');
-                }}
-                className="mt-4 text-blue-600 hover:text-blue-800"
-                >
-                Clear all filters
-              </button>
+            <div className="text-center py-8 sm:py-12 bg-white rounded-lg shadow-sm border border-gray-200">
+              <div className="w-8 h-8 sm:w-12 sm:h-12 bg-gray-300 rounded-lg mx-auto mb-3 sm:mb-4"></div>
+              <p className="text-gray-500 text-base sm:text-lg mb-1 sm:mb-2">No announcements found</p>
+              <p className="text-gray-400 text-xs sm:text-sm">
+                {searchQuery || filter !== 'all' 
+                  ? 'Try adjusting your search or filters' 
+                  : 'Create a new announcement to get started'
+                }
+              </p>
             </div>
           )}
         </div>
@@ -628,113 +444,108 @@ const Announcements = () => {
 
       {/* New Announcement Modal */}
       {showModal && (
-        <div 
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setShowModal(false);
-          }}
-        >
-          <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">Create New Announcement</h3>
-              <button 
-                onClick={() => setShowModal(false)}
-                className="text-gray-500 hover:text-gray-700 rounded-full p-1"
-              >
-                <X className="w-5 h-5" />
-              </button>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-3 sm:p-4">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="p-4 sm:p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg sm:text-xl font-semibold text-gray-900">New Announcement</h3>
+                <button 
+                  onClick={() => setShowModal(false)}
+                  className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                >
+                  <div className="w-5 h-5 bg-gray-500 rounded-full flex items-center justify-center text-white text-sm">×</div>
+                </button>
+              </div>
             </div>
             
-            <div className="space-y-4">
+            <div className="p-4 sm:p-6 space-y-3 sm:space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1 sm:mb-2">Title *</label>
                 <input 
                   type="text" 
-                  placeholder="Enter announcement title" 
-                  value={newAnnouncement.title} 
-                  onChange={e => setNewAnnouncement({...newAnnouncement, title: e.target.value})} 
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  required
+                  placeholder="Enter announcement title"
+                  value={newAnnouncement.title}
+                  onChange={e => setNewAnnouncement({...newAnnouncement, title: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#5483B3] focus:border-[#5483B3] transition-all text-sm sm:text-base"
                 />
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Content *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1 sm:mb-2">Content *</label>
                 <textarea 
-                  placeholder="Enter announcement content" 
-                  value={newAnnouncement.content} 
-                  onChange={e => setNewAnnouncement({...newAnnouncement, content: e.target.value})} 
+                  placeholder="Enter announcement content"
+                  value={newAnnouncement.content}
+                  onChange={e => setNewAnnouncement({...newAnnouncement, content: e.target.value})}
                   rows={4}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  required
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#5483B3] focus:border-[#5483B3] transition-all resize-vertical text-sm sm:text-base"
                 />
               </div>
               
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Author</label>
-                <input 
-                  type="text" 
-                  placeholder="Enter your name or team" 
-                  value={newAnnouncement.author} 
-                  onChange={e => setNewAnnouncement({...newAnnouncement, author: e.target.value})} 
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1 sm:mb-2">Category</label>
                   <select 
-                    value={newAnnouncement.category} 
-                    onChange={e => setNewAnnouncement({...newAnnouncement, category: e.target.value})} 
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    value={newAnnouncement.category}
+                    onChange={e => setNewAnnouncement({...newAnnouncement, category: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#5483B3] focus:border-[#5483B3] text-sm sm:text-base"
                   >
-                    <option value="maintenance">Maintenance</option>
-                    <option value="policy">Policy Update</option>
-                    <option value="system_update">System Update</option>
                     <option value="general">General</option>
+                    <option value="maintenance">Maintenance</option>
+                    <option value="policy">Policy</option>
+                    <option value="system_update">System Update</option>
                   </select>
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1 sm:mb-2">Priority</label>
                   <select 
-                    value={newAnnouncement.priority} 
-                    onChange={e => setNewAnnouncement({...newAnnouncement, priority: e.target.value})} 
-                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    value={newAnnouncement.priority}
+                    onChange={e => setNewAnnouncement({...newAnnouncement, priority: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#5483B3] focus:border-[#5483B3] text-sm sm:text-base"
                   >
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
                     <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
                   </select>
                 </div>
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Target Audience</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1 sm:mb-2">Audience</label>
                 <select 
-                  value={newAnnouncement.target_audience} 
-                  onChange={e => setNewAnnouncement({...newAnnouncement, target_audience: e.target.value})} 
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  value={newAnnouncement.target_audience}
+                  onChange={e => setNewAnnouncement({...newAnnouncement, target_audience: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#5483B3] focus:border-[#5483B3] text-sm sm:text-base"
                 >
                   <option value="all">All Users</option>
                   <option value="technicians">Technicians Only</option>
                   <option value="users">End Users Only</option>
                 </select>
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1 sm:mb-2">Author</label>
+                <input 
+                  type="text" 
+                  placeholder="Your name or department"
+                  value={newAnnouncement.author}
+                  onChange={e => setNewAnnouncement({...newAnnouncement, author: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#5483B3] focus:border-[#5483B3] transition-all text-sm sm:text-base"
+                />
+              </div>
             </div>
             
-            <div className="flex mt-6 space-x-3">
+            <div className="p-4 sm:p-6 border-t border-gray-200 flex flex-col sm:flex-row gap-2 sm:gap-3">
               <button 
-                onClick={handleAddAnnouncement} 
-                disabled={!newAnnouncement.title || !newAnnouncement.content}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={handleAddAnnouncement}
+                disabled={!newAnnouncement.title.trim() || !newAnnouncement.content.trim()}
+                className="flex-1 px-4 py-2 bg-[#5483B3] text-white rounded-lg hover:bg-[#3A5C80] disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm sm:text-base"
               >
                 Publish Announcement
               </button>
               <button 
-                onClick={() => setShowModal(false)} 
-                className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                onClick={() => setShowModal(false)}
+                className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all font-medium text-sm sm:text-base"
               >
                 Cancel
               </button>

@@ -12,8 +12,7 @@ import {
   LineElement,
 } from "chart.js";
 import { Bar, Pie } from "react-chartjs-2";
-import { Filter, Download, BarChart3, Users, Clock, Target } from "lucide-react";
-import { supabase } from "../lib/supabase"; // Adjust the path to your Supabase client
+import { supabase } from "../lib/supabase";
 
 ChartJS.register(
   CategoryScale,
@@ -67,21 +66,20 @@ interface MetricCardProps {
   title: string;
   value: string | number;
   description: string;
-  icon: React.ReactNode;
   iconBgColor: string;
   iconColor: string;
 }
 
-const MetricCard: React.FC<MetricCardProps> = ({ title, value, description, icon, iconBgColor, iconColor }) => (
-  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+const MetricCard: React.FC<MetricCardProps> = ({ title, value, description, iconBgColor, iconColor }) => (
+  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4">
     <div className="flex items-center justify-between">
-      <h3 className="text-sm font-medium text-gray-600">{title}</h3>
-      <div className={`p-2 ${iconBgColor} rounded-lg`}>
-        {React.cloneElement(icon as React.ReactElement, { className: `w-4 h-4 ${iconColor}` })}
+      <h3 className="text-xs sm:text-sm font-medium text-gray-600">{title}</h3>
+      <div className={`p-1.5 sm:p-2 ${iconBgColor} rounded-lg`}>
+        <div className={`w-3 h-3 sm:w-4 sm:h-4 ${iconColor} rounded`}></div>
       </div>
     </div>
-    <p className="text-2xl font-bold mt-2">{value}</p>
-    <p className="text-xs text-gray-500 mt-1">{description}</p>
+    <p className="text-xl sm:text-2xl font-bold mt-1 sm:mt-2">{value}</p>
+    <p className="text-xs text-gray-500 mt-0.5 sm:mt-1">{description}</p>
   </div>
 );
 
@@ -259,24 +257,35 @@ export default function Reports() {
   // Get color for status
   const getStatusColor = (status: string) => {
     const statusColors: Record<string, string> = {
-      'open': '#4cafef',         // Blue
-      'in_progress': '#ff9800',  // Orange
-      'resolved': '#4caf50',     // Green
-      'closed': '#9c27b0',       // Purple
-      'on_hold': '#f44336',      // Red
+      'open': '#5483B3',         // Brand Blue
+      'in_progress': '#7BA4D0',  // Light Blue
+      'resolved': '#5AB8A8',     // Teal
+      'closed': '#3A5C80',       // Dark Blue
+      'on_hold': '#D0857B',      // Red
       'reopened': '#607d8b',     // Gray
     };
     return statusColors[status] || '#607d8b'; // Default to gray
   };
 
+  // Get color for priority
+  const getPriorityColor = (priority: string) => {
+    const priorityColors: Record<string, string> = {
+      'low': '#5AB8A8',     // Teal
+      'medium': '#7BA4D0',  // Light Blue
+      'high': '#D0857B',    // Red
+      'critical': '#3A5C80', // Dark Blue
+    };
+    return priorityColors[priority] || '#607d8b'; // Default to gray
+  };
+
   // Get color for category
   const getCategoryColor = (category: string) => {
     const categoryColors: Record<string, string> = {
-      'software': '#4cafef',     // Blue
-      'hardware': '#ff9800',     // Orange
-      'network': '#4caf50',      // Green
-      'access': '#9c27b0',       // Purple
-      'other': '#607d8b',        // Gray
+      'software': '#5483B3',     // Brand Blue
+      'hardware': '#7BA4D0',     // Light Blue
+      'network': '#5AB8A8',      // Teal
+      'access': '#D0857B',       // Red
+      'other': '#3A5C80',        // Dark Blue
     };
     return categoryColors[category] || '#607d8b'; // Default to gray
   };
@@ -301,7 +310,7 @@ export default function Reports() {
       datasets: [
         {
           data: Object.values(metrics.priorityCounts),
-          backgroundColor: ["#4caf50", "#ff9800", "#f44336", "#9c27b0"],
+          backgroundColor: Object.keys(metrics.priorityCounts).map(priority => getPriorityColor(priority)),
           borderColor: "#fff",
           borderWidth: 2,
         },
@@ -334,21 +343,21 @@ export default function Reports() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-gray-50 p-3 sm:p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header with Date Filter in Right Corner */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between mb-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 sm:mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Reports & Analytics</h1>
-            <p className="text-gray-600">Track and analyze support ticket metrics</p>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Reports & Analytics</h1>
+            <p className="text-gray-600 text-sm sm:text-base">Track and analyze support ticket metrics</p>
           </div>
-          <div className="flex flex-col md:flex-row md:items-center space-y-4 md:space-y-0 md:space-x-4 mt-4 md:mt-0">
-            <div className="flex items-center space-x-2 bg-white rounded-lg shadow-sm border border-gray-200 p-2">
-              <Filter className="w-4 h-4 text-gray-500" />
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mt-3 sm:mt-0">
+            <div className="flex items-center bg-white rounded-lg shadow-sm border border-gray-200 p-2">
+              <div className="w-3 h-3 sm:w-4 sm:h-4 bg-gray-400 rounded mr-2"></div>
               <select 
                 value={dateRange} 
                 onChange={(e) => setDateRange(e.target.value)}
-                className="border-0 bg-transparent focus:outline-none focus:ring-0"
+                className="border-0 bg-transparent focus:outline-none focus:ring-0 text-xs sm:text-sm"
               >
                 <option value="all">All Time</option>
                 <option value="7">Last 7 days</option>
@@ -357,127 +366,118 @@ export default function Reports() {
                 <option value="90">Last 90 days</option>
               </select>
             </div>
-            <button className="flex items-center space-x-1 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50">
-              <Download className="w-4 h-4" />
+            <button className="flex items-center gap-1 bg-white border border-gray-300 text-gray-700 px-3 sm:px-4 py-2 rounded-lg hover:bg-gray-50 text-xs sm:text-sm">
+              <div className="w-3 h-3 sm:w-4 sm:h-4 bg-gray-600 rounded"></div>
               <span>Export</span>
             </button>
           </div>
         </div>
 
         {/* Main Content Container */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4 md:p-6">
           {isLoading ? (
-            <div className="flex justify-center items-center h-64">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+            <div className="flex justify-center items-center h-48 sm:h-64">
+              <div className="animate-spin rounded-full h-8 w-8 sm:h-12 sm:w-12 border-b-2 border-[#5483B3]"></div>
             </div>
           ) : (
             <>
               {/* Stats Overview */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div className="col-span-1">
-                  <MetricCard
-                    title="Total Tickets"
-                    value={filteredTickets.length}
-                    description={`Tickets in ${dateRange === "all" ? "all time" : `last ${dateRange} days`}`}
-                    icon={<BarChart3 />}
-                    iconBgColor="bg-blue-100"
-                    iconColor="text-blue-600"
-                  />
-                </div>
-                <div className="col-span-1">
-                  <MetricCard
-                    title="Avg. Resolution Time"
-                    value={`${metrics.avgResolutionTime.toFixed(1)}`}
-                    description="Days to resolve"
-                    icon={<Clock />}
-                    iconBgColor="bg-green-100"
-                    iconColor="text-green-600"
-                  />
-                </div>
-                <div className="col-span-1">
-                  <MetricCard
-                    title="SLA Compliance"
-                    value={`${metrics.slaComplianceRate.toFixed(1)}%`}
-                    description="Meeting deadlines"
-                    icon={<Target />}
-                    iconBgColor="bg-purple-100"
-                    iconColor="text-purple-600"
-                  />
-                </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 mb-4 sm:mb-6">
+                <MetricCard
+                  title="Total Tickets"
+                  value={filteredTickets.length}
+                  description={`Tickets in ${dateRange === "all" ? "all time" : `last ${dateRange} days`}`}
+                  iconBgColor="bg-[#F0F5FC]"
+                  iconColor="bg-[#5483B3]"
+                />
+                <MetricCard
+                  title="Avg. Resolution Time"
+                  value={`${metrics.avgResolutionTime.toFixed(1)}`}
+                  description="Days to resolve"
+                  iconBgColor="bg-green-50"
+                  iconColor="bg-[#5AB8A8]"
+                />
+                <MetricCard
+                  title="SLA Compliance"
+                  value={`${metrics.slaComplianceRate.toFixed(1)}%`}
+                  description="Meeting deadlines"
+                  iconBgColor="bg-[#F0F5FC]"
+                  iconColor="bg-[#5483B3]"
+                />
               </div>
 
-              {/* Additional Stats - Removed Open Tickets */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                  <h3 className="text-sm font-medium text-gray-600">In Progress</h3>
-                  <p className="text-2xl font-bold mt-2">
+              {/* Additional Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 mb-4 sm:mb-6">
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4">
+                  <h3 className="text-xs sm:text-sm font-medium text-gray-600">In Progress</h3>
+                  <p className="text-xl sm:text-2xl font-bold mt-1 sm:mt-2">
                     {filteredTickets.filter(t => t.status === 'in_progress').length}
                   </p>
                 </div>
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                  <h3 className="text-sm font-medium text-gray-600">Resolved</h3>
-                  <p className="text-2xl font-bold mt-2">
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4">
+                  <h3 className="text-xs sm:text-sm font-medium text-gray-600">Resolved</h3>
+                  <p className="text-xl sm:text-2xl font-bold mt-1 sm:mt-2">
                     {filteredTickets.filter(t => t.status === 'resolved').length}
                   </p>
                 </div>
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                  <h3 className="text-sm font-medium text-gray-600">Closed</h3>
-                  <p className="text-2xl font-bold mt-2">
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4">
+                  <h3 className="text-xs sm:text-sm font-medium text-gray-600">Closed</h3>
+                  <p className="text-xl sm:text-2xl font-bold mt-1 sm:mt-2">
                     {filteredTickets.filter(t => t.status === 'closed').length}
                   </p>
                 </div>
               </div>
 
               {/* Charts Section */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-4 sm:mb-6">
                 {/* Status Chart - Bar Chart */}
-                <div className="bg-gray-50 rounded-lg shadow-sm border border-gray-200 p-6">
-                  <h3 className="text-lg font-semibold mb-4">Tickets by Status</h3>
-                  <div className="h-80">
+                <div className="bg-gray-50 rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+                  <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">Tickets by Status</h3>
+                  <div className="h-48 sm:h-64 lg:h-80">
                     <Bar data={chartData.bar} options={chartOptions} />
                   </div>
                 </div>
 
                 {/* Priority Chart - Pie Chart */}
-                <div className="bg-gray-50 rounded-lg shadow-sm border border-gray-200 p-6">
-                  <h3 className="text-lg font-semibold mb-4">Tickets by Priority</h3>
-                  <div className="h-64">
+                <div className="bg-gray-50 rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+                  <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">Tickets by Priority</h3>
+                  <div className="h-48 sm:h-64">
                     <Pie data={chartData.priority} options={chartOptions} />
                   </div>
                 </div>
 
                 {/* Category Chart - Bar Chart */}
-                <div className="bg-gray-50 rounded-lg shadow-sm border border-gray-200 p-6">
-                  <h3 className="text-lg font-semibold mb-4">Tickets by Category</h3>
-                  <div className="h-64">
+                <div className="bg-gray-50 rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 lg:col-span-2">
+                  <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">Tickets by Category</h3>
+                  <div className="h-48 sm:h-64">
                     <Bar data={chartData.category} options={chartOptions} />
                   </div>
                 </div>
               </div>
 
               {/* Agent Performance */}
-              <div className="bg-gray-50 rounded-lg shadow-sm border border-gray-200 p-6">
-                <h3 className="text-lg font-semibold mb-4 flex items-center">
-                  <Users className="w-5 h-5 mr-2" />
+              <div className="bg-gray-50 rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+                <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center">
+                  <div className="w-4 h-4 sm:w-5 sm:h-5 bg-[#5483B3] rounded mr-2"></div>
                   Agent Performance
                 </h3>
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead>
                       <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Agent</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tickets Handled</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Avg. Resolution Time</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SLA Compliance</th>
+                        <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Agent</th>
+                        <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tickets Handled</th>
+                        <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Avg. Resolution Time</th>
+                        <th className="px-3 sm:px-4 py-2 sm:py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SLA Compliance</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
                       {metrics.agentPerformance.map((agent) => (
                         <tr key={agent.id}>
-                          <td className="px-4 py-3 whitespace-nowrap">{agent.name}</td>
-                          <td className="px-4 py-3 whitespace-nowrap">{agent.ticketsHandled}</td>
-                          <td className="px-4 py-3 whitespace-nowrap">{agent.avgResolutionTime.toFixed(1)} days</td>
-                          <td className="px-4 py-3 whitespace-nowrap">{agent.slaComplianceRate.toFixed(1)}%</td>
+                          <td className="px-3 sm:px-4 py-2 sm:py-3 whitespace-nowrap text-sm">{agent.name}</td>
+                          <td className="px-3 sm:px-4 py-2 sm:py-3 whitespace-nowrap text-sm">{agent.ticketsHandled}</td>
+                          <td className="px-3 sm:px-4 py-2 sm:py-3 whitespace-nowrap text-sm">{agent.avgResolutionTime.toFixed(1)} days</td>
+                          <td className="px-3 sm:px-4 py-2 sm:py-3 whitespace-nowrap text-sm">{agent.slaComplianceRate.toFixed(1)}%</td>
                         </tr>
                       ))}
                     </tbody>

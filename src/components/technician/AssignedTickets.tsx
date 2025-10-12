@@ -193,7 +193,6 @@ const AssignedTickets: React.FC<AssignedTicketsProps> = ({ currentUser, onViewTi
                   <span><strong>ID:</strong> {ticket.id.slice(0, 8)}...</span>
                   <span className="capitalize"><strong>Type:</strong> {ticket.type.replace('_', ' ')}</span>
                   <span><strong>Requester:</strong> {ticket.requester_name}</span>
-                  <span><strong>Est. Time:</strong> {ticket.estimatedTime}</span>
                   <div className="col-span-2 flex items-center">
                     <strong>Status:</strong>
                     <span className={`ml-2 px-2 py-0.5 rounded text-xs capitalize border ${statusColor(ticket.status)}`}>

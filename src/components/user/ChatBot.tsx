@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Bot, Send } from "lucide-react";
+import { Bot, Send, X, Minimize2 } from "lucide-react";
 
 interface ChatMessage {
   id: string;
@@ -32,7 +32,7 @@ const createTicketSteps: string[] = [
 
 const ServiceDeskChatbot: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { id: "1", sender: "bot", text: "Hello 👋 I’m your Service Desk assistant. What would you like to do today?" },
+    { id: "1", sender: "bot", text: "Hello 👋 I'm your Service Desk assistant. What would you like to do today?" },
   ]);
 
   const [options, setOptions] = useState<string[]>([
@@ -47,18 +47,22 @@ const ServiceDeskChatbot: React.FC = () => {
   const [ticketStepIndex, setTicketStepIndex] = useState<number>(0);
   const [guidingTicket, setGuidingTicket] = useState<boolean>(false);
   const [isOpen, setIsOpen] = useState(true);
+  const [isMinimized, setIsMinimized] = useState(false);
 
   const chatbotRef = useRef<HTMLDivElement | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastFocusedElement = useRef<Element | null>(null);
 
+  // Auto-scroll to bottom of messages
   useEffect(() => {
-    // Save last focused element on open to return focus later
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  useEffect(() => {
     if (isOpen) {
       lastFocusedElement.current = document.activeElement;
-      // Focus chatbot container for screen reader users
       chatbotRef.current?.focus();
     } else if (lastFocusedElement.current instanceof HTMLElement) {
-      // Return focus to last focused element when chatbot closes
       lastFocusedElement.current.focus();
     }
   }, [isOpen]);
@@ -164,81 +168,150 @@ const ServiceDeskChatbot: React.FC = () => {
     addBotMessage("Thanks for the info 👍 Our team will assist you shortly.");
   };
 
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
   if (!isOpen) return null;
+
+  if (isMinimized) {
+    return (
+      <div
+        ref={chatbotRef}
+        className="fixed bottom-4 right-4 w-80 sm:w-96 bg-white border border-gray-200 rounded-xl shadow-lg"
+      >
+        <div className="flex items-center justify-between p-3 bg-[#5483B3] text-white rounded-t-xl">
+          <div className="flex items-center gap-2">
+            <Bot size={18} />
+            <span className="font-semibold text-sm">Service Desk Assistant</span>
+          </div>
+          <div className="flex gap-1">
+            <button
+              onClick={() => setIsMinimized(false)}
+              className="p-1 hover:bg-[#476a8a] rounded transition-colors duration-200"
+              aria-label="Maximize chat"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setIsOpen(false)}
+              className="p-1 hover:bg-[#476a8a] rounded transition-colors duration-200"
+              aria-label="Close chat"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
       ref={chatbotRef}
-      tabIndex={-1}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="chatbot-heading"
-      className="w-full max-w-md mx-auto border rounded-2xl shadow p-4 bg-white"
+      className="fixed bottom-4 right-4 w-full max-w-sm sm:max-w-md bg-white border border-gray-200 rounded-xl shadow-lg flex flex-col"
+      style={{ height: "500px" }}
     >
-      <div className="flex justify-between items-center mb-2">
-        <h2 id="chatbot-heading" className="text-xl font-bold flex items-center gap-2">
-          <Bot size={20} /> Service Desk Chatbot
-        </h2>
-        <button
-          aria-label="Close chatbot"
-          onClick={() => setIsOpen(false)}
-          className="text-gray-500 hover:text-gray-800 focus:outline focus:outline-2 focus:outline-offset-2 focus:outline-blue-600 rounded"
-        >
-          ✕
-        </button>
+      {/* Header */}
+      <div className="flex items-center justify-between p-3 sm:p-4 bg-[#5483B3] text-white rounded-t-xl">
+        <div className="flex items-center gap-2">
+          <Bot size={20} />
+          <span className="font-semibold text-sm sm:text-base">Service Desk Assistant</span>
+        </div>
+        <div className="flex gap-1">
+          <button
+            onClick={() => setIsMinimized(true)}
+            className="p-1 hover:bg-[#476a8a] rounded transition-colors duration-200"
+            aria-label="Minimize chat"
+          >
+            <Minimize2 size={16} />
+          </button>
+          <button
+            onClick={() => setIsOpen(false)}
+            className="p-1 hover:bg-[#476a8a] rounded transition-colors duration-200"
+            aria-label="Close chat"
+          >
+            <X size={16} />
+          </button>
+        </div>
       </div>
-      <div className="h-96 overflow-y-auto border p-2 rounded mb-2" aria-live="polite" aria-atomic="false">
+
+      {/* Messages */}
+      <div 
+        className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 bg-gray-50"
+        aria-live="polite"
+      >
         {messages.map((msg) => (
-          <div key={msg.id} className={`my-1 flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
+          <div
+            key={msg.id}
+            className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}
+          >
             <div
-              className={`px-3 py-2 rounded-2xl max-w-[75%] ${
-                msg.sender === "user" ? "bg-blue-500 text-white" : "bg-gray-200"
+              className={`max-w-[85%] px-3 sm:px-4 py-2 rounded-2xl text-sm sm:text-base ${
+                msg.sender === "user"
+                  ? "bg-[#5483B3] text-white rounded-br-none"
+                  : "bg-white border border-gray-200 text-gray-800 rounded-bl-none shadow-sm"
               }`}
             >
               {msg.text}
             </div>
           </div>
         ))}
+        <div ref={messagesEndRef} />
       </div>
 
+      {/* Options */}
       {options.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-2">
-          {options.map((opt, idx) => (
-            <button
-              key={idx}
-              onClick={() => {
-                if (guidingTicket && opt === "Next") {
-                  handleNextTicketStep();
-                } else if (opt === "Done") {
-                  handleStepDone();
-                } else {
-                  handleOptionClick(opt);
-                }
-              }}
-              className="bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded-2xl text-sm"
-            >
-              {opt}
-            </button>
-          ))}
+        <div className="px-3 sm:px-4 py-2 bg-white border-t border-gray-200">
+          <div className="flex flex-wrap gap-2">
+            {options.map((opt, idx) => (
+              <button
+                key={idx}
+                onClick={() => {
+                  if (guidingTicket && opt === "Next") {
+                    handleNextTicketStep();
+                  } else if (opt === "Done") {
+                    handleStepDone();
+                  } else {
+                    handleOptionClick(opt);
+                  }
+                }}
+                className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg text-xs sm:text-sm font-medium transition-colors duration-200 border border-gray-300"
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={userInput}
-          onChange={(e) => setUserInput(e.target.value)}
-          placeholder="Type your message..."
-          className="flex-1 border rounded-2xl px-3 py-2"
-          aria-label="Type your message"
-        />
-        <button
-          onClick={handleSend}
-          className="bg-blue-500 text-white px-3 py-2 rounded-2xl flex items-center gap-1"
-          aria-label="Send message"
-        >
-          <Send size={16} /> Send
-        </button>
+      {/* Input */}
+      <div className="p-3 sm:p-4 bg-white border-t border-gray-200 rounded-b-xl">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={userInput}
+            onChange={(e) => setUserInput(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="Type your message..."
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#5483B3] focus:border-[#5483B3] text-sm sm:text-base transition-colors duration-200"
+            aria-label="Type your message"
+          />
+          <button
+            onClick={handleSend}
+            disabled={!userInput.trim()}
+            className="px-3 sm:px-4 py-2 bg-[#5483B3] text-white rounded-lg hover:bg-[#476a8a] disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors duration-200 flex items-center gap-1"
+            aria-label="Send message"
+          >
+            <Send size={16} />
+            <span className="hidden sm:inline">Send</span>
+          </button>
+        </div>
       </div>
     </div>
   );

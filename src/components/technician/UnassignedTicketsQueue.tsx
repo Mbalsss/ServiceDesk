@@ -5,13 +5,13 @@ import { X } from 'lucide-react';
 
 interface Ticket {
   id: string;
+  ticket_number: string;
   title: string;
   description: string;
   type: string;
   priority: string;
   status: string;
   requester_name: string;
-  estimatedTime?: string;
   created_at: string;
   category: string;
 }
@@ -50,6 +50,7 @@ const UnassignedTicketsQueue: React.FC<UnassignedTicketsQueueProps> = ({
 
       const tickets = data.map((ticket: any) => ({
         id: ticket.id,
+        ticket_number: ticket.ticket_number,
         title: ticket.title,
         description: ticket.description,
         type: ticket.type,
@@ -57,7 +58,6 @@ const UnassignedTicketsQueue: React.FC<UnassignedTicketsQueueProps> = ({
         status: ticket.status,
         category: ticket.category || 'General',
         requester_name: ticket.requester?.full_name || 'Unknown',
-        estimatedTime: ticket.estimated_time || 'Not specified',
         created_at: ticket.created_at
       }));
 
@@ -179,10 +179,10 @@ const UnassignedTicketsQueue: React.FC<UnassignedTicketsQueueProps> = ({
                 </div>
                 <p className="text-sm text-gray-600 mb-4 line-clamp-2">{ticket.description}</p>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm text-gray-500 border-t pt-4">
-                  <span><strong>ID:</strong> {ticket.id.slice(0, 8)}...</span>
+                  <span><strong>Ticket #:</strong> {ticket.ticket_number}</span>
                   <span className="capitalize"><strong>Type:</strong> {ticket.type.replace('_', ' ')}</span>
                   <span><strong>Requester:</strong> {ticket.requester_name}</span>
-                  <span><strong>Est. Time:</strong> {ticket.estimatedTime}</span>
+                  <span><strong>Category:</strong> {ticket.category}</span>
                   <div className="col-span-2 flex items-center">
                     <strong>Status:</strong>
                     <span className={`ml-2 px-2 py-0.5 rounded text-xs capitalize border ${statusColor(ticket.status)}`}>
@@ -233,6 +233,10 @@ const UnassignedTicketsQueue: React.FC<UnassignedTicketsQueueProps> = ({
                   <h3 className="text-lg font-semibold text-gray-800 mb-3">Ticket Details</h3>
                   <div className="space-y-3">
                     <div className="flex justify-between">
+                      <span className="text-gray-600">Ticket #:</span>
+                      <span className="font-medium">{selectedTicket.ticket_number}</span>
+                    </div>
+                    <div className="flex justify-between">
                       <span className="text-gray-600">Status:</span>
                       <span className={`px-2.5 py-1 rounded text-xs capitalize border ${statusColor(selectedTicket.status)}`}>
                         {selectedTicket.status.replace('_', ' ')}
@@ -251,10 +255,6 @@ const UnassignedTicketsQueue: React.FC<UnassignedTicketsQueueProps> = ({
                     <div className="flex justify-between">
                       <span className="text-gray-600">Category:</span>
                       <span className="font-medium capitalize">{selectedTicket.category}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Estimated Time:</span>
-                      <span className="font-medium">{selectedTicket.estimatedTime}</span>
                     </div>
                   </div>
                 </div>
