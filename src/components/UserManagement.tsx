@@ -146,7 +146,7 @@ const UserManagement: React.FC = () => {
     }
   };
 
-  // Remove user
+  // Remove user - FIXED VERSION
   const removeUser = async (id: string) => {
     if (!confirm('Are you sure you want to permanently delete this user? This action cannot be undone.')) return;
 
@@ -215,7 +215,19 @@ const UserManagement: React.FC = () => {
         
         setSuccess('User deactivated and anonymized successfully!');
       } else {
-        setSuccess('User permanently deleted successfully!');
+        // ✅ FIXED: Also delete from profiles table when Auth deletion succeeds
+        const { error: deleteProfileError } = await supabase
+          .from('profiles')
+          .delete()
+          .eq('id', id);
+
+        if (deleteProfileError) {
+          console.error('Failed to delete profile record:', deleteProfileError);
+          // Even if profile deletion fails, we should still proceed since auth user is deleted
+          setSuccess('User authentication deleted but profile record may still exist.');
+        } else {
+          setSuccess('User permanently deleted successfully!');
+        }
       }
 
       await fetchUsers();

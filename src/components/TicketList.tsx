@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Filter, Search, Eye, MoreHorizontal, Plus, X, Calendar, User, FileText } from 'lucide-react';
+import { Filter, Search, Eye, MoreHorizontal, X, Calendar, User, FileText } from 'lucide-react';
 import { Ticket } from '../types';
 import CreateTicket from './CreateTicket';
 import TicketDetails from './TicketDetails';
@@ -134,18 +134,11 @@ const TicketList: React.FC<TicketListProps> = ({
   return (
     <div className="p-3 sm:p-4 md:p-6 bg-gray-50 min-h-screen">
       {/* Header */}
-      <div className="mb-4 sm:mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+      <div className="mb-4 sm:mb-6">
         <div>
           <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Tickets</h2>
           <p className="text-gray-600 mt-1 text-sm sm:text-base">Manage and track all service requests</p>
         </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="flex items-center justify-center space-x-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-[#5483B3] text-white rounded-lg hover:bg-[#3A5C80] transition-colors shadow-sm text-sm sm:text-base"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Ticket</span>
-        </button>
       </div>
 
       {/* Filters */}
