@@ -1,183 +1,171 @@
-# Supabase CLI
+# IT Service Desk Application
 
-[![Coverage Status](https://coveralls.io/repos/github/supabase/cli/badge.svg?branch=main)](https://coveralls.io/github/supabase/cli?branch=main) [![Bitbucket Pipelines](https://img.shields.io/bitbucket/pipelines/supabase-cli/setup-cli/master?style=flat-square&label=Bitbucket%20Canary)](https://bitbucket.org/supabase-cli/setup-cli/pipelines) [![Gitlab Pipeline Status](https://img.shields.io/gitlab/pipeline-status/sweatybridge%2Fsetup-cli?label=Gitlab%20Canary)
-](https://gitlab.com/sweatybridge/setup-cli/-/pipelines)
+A modern, feature-rich IT service desk application built with React, TypeScript, and Tailwind CSS. This application provides comprehensive incident management, Microsoft Teams integration, and AI-powered assistance through Microsoft 365 Copilot.
 
-[Supabase](https://supabase.io) is an open source Firebase alternative. We're building the features of Firebase using enterprise-grade open source tools.
+## Features
 
-This repository contains all the functionality for Supabase CLI.
+### Core Functionality
+- **Ticket Management**: Create, track, and manage IT support tickets
+- **Dashboard**: Real-time overview of ticket metrics and system status
+- **User Management**: Role-based access control for users and technicians
+- **Notifications**: Email notifications powered by EmailJS
 
-- [x] Running Supabase locally
-- [x] Managing database migrations
-- [x] Creating and deploying Supabase Functions
-- [x] Generating types directly from your database schema
-- [x] Making authenticated HTTP requests to [Management API](https://supabase.com/docs/reference/api/introduction)
+### Technician Tools
+- **Assigned Tickets**: View and manage assigned support tickets
+- **Unassigned Queue**: Pick up tickets from the queue
+- **Equipment Management**: Track and manage IT equipment
+- **Field Reports**: Document field work and on-site visits
+- **Internal Comments**: Private notes for technician collaboration
+- **Performance Overview**: Track technician metrics and productivity
 
-## Getting started
+### User Features
+- **My Tickets**: View personal ticket history
+- **Create Ticket**: Submit new support requests
+- **ChatBot**: AI-powered support assistant
+- **Profile Settings**: Manage personal preferences and notification settings
 
-### Install the CLI
+### Advanced Features
+- **Major Incident Management**: Handle critical incidents with dedicated workflow
+- **Microsoft Teams Integration**: Connect with Teams for notifications and collaboration
+- **Copilot Assistant**: AI-powered suggestions and automation
+- **Reports & Analytics**: Comprehensive reporting with charts
+- **Scheduler**: Plan and schedule maintenance windows
+- **Automation**: Automate repetitive tasks
+- **Reminders**: Set and manage task reminders
+- **Announcements**: System-wide communication
+- **Tech Availability**: Manage technician schedules
 
-Available via [NPM](https://www.npmjs.com) as dev dependency. To install:
+## Tech Stack
+
+- **Frontend**: React 18 + TypeScript
+- **Styling**: Tailwind CSS
+- **Build Tool**: Vite
+- **Database**: Supabase
+- **Authentication**: Supabase Auth
+- **Charts**: Chart.js, Recharts
+- **Icons**: Lucide React
+- **Animations**: Framer Motion
+- **Email**: EmailJS
+- **Microsoft Integration**:
+  - @azure/msal-browser
+  - @azure/msal-react
+  - @microsoft/teams-js
+  - @microsoft/microsoft-graph-client
+
+## Getting Started
+
+### Prerequisites
+- Node.js (v18 or higher)
+- npm or yarn
+- Supabase account
+
+### Installation
+
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd <project-directory>
+```
+
+2. Install dependencies:
+```bash
+npm install
+```
+
+3. Set up environment variables:
+Create a `.env` file in the root directory with the following variables:
+```env
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+4. Run the development server:
+```bash
+npm run dev
+```
+
+The application will be available at `http://localhost:5173`
+
+### Building for Production
 
 ```bash
-npm i supabase --save-dev
+npm run build
 ```
 
-To install the beta release channel:
+The built files will be in the `dist` directory.
+
+### Preview Production Build
 
 ```bash
-npm i supabase@beta --save-dev
+npm run preview
 ```
 
-When installing with yarn 4, you need to disable experimental fetch with the following nodejs config.
+## Project Structure
 
 ```
-NODE_OPTIONS=--no-experimental-fetch yarn add supabase
+project/
+├── src/
+│   ├── components/          # React components
+│   │   ├── technician/      # Technician-specific components
+│   │   ├── user/            # User-specific components
+│   │   ├── contexts/        # React contexts
+│   │   └── hooks/           # Custom React hooks
+│   ├── services/            # API and service layers
+│   ├── types/               # TypeScript type definitions
+│   ├── lib/                 # Library configurations
+│   ├── utils/               # Utility functions
+│   ├── assets/              # Static assets
+│   └── App.tsx              # Main application component
+├── supabase/
+│   ├── migrations/          # Database migrations
+│   └── functions/           # Supabase Edge Functions
+├── public/                  # Public assets
+└── appPackage/              # Microsoft Teams app package
 ```
 
-> **Note**
-For Bun versions below v1.0.17, you must add `supabase` as a [trusted dependency](https://bun.sh/guides/install/trusted) before running `bun add -D supabase`.
+## Database Schema
 
-<details>
-  <summary><b>macOS</b></summary>
+The application uses Supabase with the following main tables:
+- `users`: User accounts and profiles
+- `tickets`: Support tickets
+- `ticket_updates`: Ticket comments and updates
+- `technicians`: Technician profiles and availability
+- `equipment`: IT equipment tracking
+- `major_incidents`: Critical incident tracking
 
-  Available via [Homebrew](https://brew.sh). To install:
+See `/supabase/migrations/` for detailed schema definitions.
 
-  ```sh
-  brew install supabase/tap/supabase
-  ```
+## Authentication
 
-  To install the beta release channel:
-  
-  ```sh
-  brew install supabase/tap/supabase-beta
-  brew link --overwrite supabase-beta
-  ```
-  
-  To upgrade:
+The application uses Supabase Authentication with email/password login. User roles are managed through the database with Row Level Security (RLS) policies.
 
-  ```sh
-  brew upgrade supabase
-  ```
-</details>
+## Microsoft Teams Integration
 
-<details>
-  <summary><b>Windows</b></summary>
+The application includes Microsoft Teams integration for:
+- Notifications in Teams channels
+- OAuth authentication
+- Teams app manifest for deployment
 
-  Available via [Scoop](https://scoop.sh). To install:
+Configure Teams integration through the Settings page.
 
-  ```powershell
-  scoop bucket add supabase https://github.com/supabase/scoop-bucket.git
-  scoop install supabase
-  ```
+## Supabase Edge Functions
 
-  To upgrade:
+The application includes several edge functions:
+- `invite-user`: Send invitation emails to new users
+- `send-admin-notification`: Send notifications to administrators
+- `teams-oauth`: Handle Microsoft Teams OAuth flow
 
-  ```powershell
-  scoop update supabase
-  ```
-</details>
+## Scripts
 
-<details>
-  <summary><b>Linux</b></summary>
+- `npm run dev`: Start development server
+- `npm run build`: Build for production
+- `npm run preview`: Preview production build
+- `npm run lint`: Run ESLint
 
-  Available via [Homebrew](https://brew.sh) and Linux packages.
+## License
 
-  #### via Homebrew
+ISC
 
-  To install:
+## Support
 
-  ```sh
-  brew install supabase/tap/supabase
-  ```
-
-  To upgrade:
-
-  ```sh
-  brew upgrade supabase
-  ```
-
-  #### via Linux packages
-
-  Linux packages are provided in [Releases](https://github.com/supabase/cli/releases). To install, download the `.apk`/`.deb`/`.rpm`/`.pkg.tar.zst` file depending on your package manager and run the respective commands.
-
-  ```sh
-  sudo apk add --allow-untrusted <...>.apk
-  ```
-
-  ```sh
-  sudo dpkg -i <...>.deb
-  ```
-
-  ```sh
-  sudo rpm -i <...>.rpm
-  ```
-
-  ```sh
-  sudo pacman -U <...>.pkg.tar.zst
-  ```
-</details>
-
-<details>
-  <summary><b>Other Platforms</b></summary>
-
-  You can also install the CLI via [go modules](https://go.dev/ref/mod#go-install) without the help of package managers.
-
-  ```sh
-  go install github.com/supabase/cli@latest
-  ```
-
-  Add a symlink to the binary in `$PATH` for easier access:
-
-  ```sh
-  ln -s "$(go env GOPATH)/bin/cli" /usr/bin/supabase
-  ```
-
-  This works on other non-standard Linux distros.
-</details>
-
-<details>
-  <summary><b>Community Maintained Packages</b></summary>
-
-  Available via [pkgx](https://pkgx.sh/). Package script [here](https://github.com/pkgxdev/pantry/blob/main/projects/supabase.com/cli/package.yml).
-  To install in your working directory:
-
-  ```bash
-  pkgx install supabase
-  ```
-
-  Available via [Nixpkgs](https://nixos.org/). Package script [here](https://github.com/NixOS/nixpkgs/blob/master/pkgs/development/tools/supabase-cli/default.nix).
-</details>
-
-### Run the CLI
-
-```bash
-supabase bootstrap
-```
-
-Or using npx:
-
-```bash
-npx supabase bootstrap
-```
-
-The bootstrap command will guide you through the process of setting up a Supabase project using one of the [starter](https://github.com/supabase-community/supabase-samples/blob/main/samples.json) templates.
-
-## Docs
-
-Command & config reference can be found [here](https://supabase.com/docs/reference/cli/about).
-
-## Breaking changes
-
-We follow semantic versioning for changes that directly impact CLI commands, flags, and configurations.
-
-However, due to dependencies on other service images, we cannot guarantee that schema migrations, seed.sql, and generated types will always work for the same CLI major version. If you need such guarantees, we encourage you to pin a specific version of CLI in package.json.
-
-## Developing
-
-To run from source:
-
-```sh
-# Go >= 1.22
-go run . help
-```
+For issues and questions, please create a ticket through the application or contact your IT administrator.
